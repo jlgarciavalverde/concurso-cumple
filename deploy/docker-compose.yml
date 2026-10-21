@@ -1,0 +1,29 @@
+# Se copia a ~/servicios/concurso/ en el VPS (tools/deploy.mjs). Sin `ports:`: solo por el túnel de Cloudflare (red `proxy`).
+services:
+  concurso:
+    image: concurso-cumple:0.1.0
+    container_name: concurso
+    restart: unless-stopped
+    # Docker del VPS es rootless: el root del contenedor es el usuario del host, sin privilegios reales.
+    user: "0:0"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    environment:
+      PIN: ${PIN}
+      APP_VERSION: ${APP_VERSION}
+      LOG_LEVEL: warn
+    volumes: ["./data:/data"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+    mem_limit: 256m
+    cpus: 0.5
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    networks: [proxy]
+
+networks:
+  proxy:
+    external: true

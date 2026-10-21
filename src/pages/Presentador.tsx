@@ -1,0 +1,516 @@
+import { useEffect, useState } from "react";
+import type { Sub, VistaHost } from "../../shared/tipos.ts";
+import type { AccionHost } from "../../server/juego.ts";
+import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS } from "../components/comun.tsx";
+import { guardado, useCanal } from "../socket.ts";
+
+export function usePin() {
+  const [pin, setPin] = useState(guardado.leer("pin") ?? "");
+  const [ok, setOk] = useState(!!pin);
+  const pedir = (msg?: string) => (
+    <div className="movil">
+      <form
+        className="movil-cuerpo col"
+        onSubmit={(e) => {
+          e.preventDefault();
+          guardado.poner("pin", pin);
+          setOk(true);
+        }}
+      >
+        <div className="espera"><div className="grande">🎤</div>Presentador</div>
+        {msg && <div className="error">{msg}</div>}
+        <input className="campo" type="password" inputMode="numeric" placeholder="PIN" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
+        <button className="btn prim grande">Entrar</button>
+      </form>
+    </div>
+  );
+  const salir = () => {
+    guardado.poner("pin", null);
+    setOk(false);
+  };
+  return { pin, ok, pedir, salir };
+}
+
+export function Presentador() {
+  const { pin, ok, pedir, salir } = usePin();
+  const { datos: h, error, desfase, conectado, enviar } = useCanal<VistaHost>(ok ? { rol: "host", pin } : null, "host");
+  useEffect(() => {
+    if (error) salir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
+  if (!ok) return pedir(error ?? undefined);
+  if (!h) return <div className="movil"><div className="movil-cuerpo espera">{conectado ? "Cargando…" : "Conectando…"}</div></div>;
+
+  const a = (acc: AccionHost) => enviar("host", acc);
+  const { contenido: c, estado: e, publico: p } = h;
+  const subId = e.vivo.subId;
+  const actual = c.pruebas.flatMap((pr) => pr.subs.map((s) => ({ s, pr }))).find((x) => x.s.id === subId);
+
+  return (
+    <div className="host">
+      <nav className="host-nav panel">
+        <button className={!subId ? "on" : ""} onClick={() => a({ t: "ir", subId: null })}>🏠 Inicio / QR</button>
+        {c.pruebas.map((pr) => (
+          <div key={pr.id} style={{ display: "contents" }}>
+            <div className="prueba">{pr.emoji} {pr.titulo}</div>
+            {pr.subs.map((s) => (
+              <button key={s.id} className={s.id === subId ? "on" : ""} onClick={() => a({ t: "ir", subId: s.id })}>
+                <span>{s.titulo}</span>
+                <span>{e.puntos[s.id] ? "✅" : e.crudo[s.id] ? "⏳" : ""}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+        <a className="btn peq" href="/admin" style={{ marginTop: 12, textAlign: "center", textDecoration: "none" }}>✏️ Editar contenido</a>
+      </nav>
+
+      <main className="host-main">
+        <div className="host-barra panel">
+          <div className="fila">
+            <span className="chip">{conectado ? "🟢" : "🔴"} Código <b>{e.codigo}</b></span>
+            <span className="chip">📺 {h.tv ? "TV conectada" : "TV sin conectar"}</span>
+            {c.equipos.map((q) => (
+              <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} />{h.conectados[q.id] ?? 0}📱</span>
+            ))}
+          </div>
+          <div className="fila">
+            {(["juego", "marcador", "podio"] as const).map((v) => (
+              <button key={v} className={`btn peq ${p.vista === v ? "prim" : ""}`} onClick={() => a({ t: "vista", v })}>
+                {v === "juego" ? "🎮 Juego" : v === "marcador" ? "📊 Marcador" : "🏆 Podio"}
+              </button>
+            ))}
+            <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}>↩️ Deshacer</button>
+          </div>
+        </div>
+
+        {actual ? (
+          <Control h={h} sub={actual.s} titulo={`${actual.pr.emoji} ${actual.pr.titulo}`} a={a} desfase={desfase} />
+        ) : (
+          <div className="panel col">
+            <h2>Inicio</h2>
+            <p className="suave">La TV muestra el QR para que cada equipo entre con su móvil. Abre la TV en <b>{location.host}/tv</b> y pulsa «Activar pantalla y sonido».</p>
+            <p className="suave">Elige una prueba en el menú para empezar.</p>
+          </div>
+        )}
+
+        <Marcador h={h} a={a} />
+        <Peligro a={a} />
+      </main>
+    </div>
+  );
+}
+
+type A = (acc: AccionHost) => void;
+
+function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titulo: string; a: A; desfase: number }) {
+  const v = h.estado.vivo;
+  const p = h.publico;
+  const fase = v.fase;
+  return (
+    <div className="panel col">
+      <div className="fila" style={{ justifyContent: "space-between" }}>
+        <div>
+          <div className="suave">{titulo}</div>
+          <h2>{sub.titulo}</h2>
+        </div>
+        <div className="fila">
+          <span className="chip">Fase: <b>{fase}</b></span>
+          {p.sub && p.sub.total > 0 && sub.tipo !== "tarjetas" && sub.tipo !== "adivinar" && <span className="chip">{v.indice + 1}/{p.sub.total}</span>}
+          {v.fin !== null && <Cuenta fin={v.fin} inicio={v.abiertaEn} desfase={desfase} tam="52px" />}
+        </div>
+      </div>
+      {sub.descripcion && <div className="suave">{sub.descripcion}</div>}
+
+      {fase === "resultado" ? (
+        <Resultado h={h} sub={sub} a={a} />
+      ) : (
+        <>
+          {sub.tipo === "test" && <ControlTest h={h} sub={sub} a={a} />}
+          {sub.tipo === "precio" && <ControlPrecio h={h} sub={sub} a={a} />}
+          {sub.tipo === "adivinar" && <ControlAdivinar h={h} sub={sub} a={a} />}
+          {sub.tipo === "cancion" && <ControlCancion h={h} sub={sub} a={a} />}
+          {sub.tipo === "tarjetas" && <ControlTarjetas h={h} sub={sub} a={a} />}
+          {sub.tipo === "manual" && <ControlManual h={h} sub={sub} a={a} desfase={desfase} />}
+          <div className="fila">
+            {v.fin !== null && <button className="btn peq" onClick={() => a({ t: "mas", segundos: 15 })}>+15 s</button>}
+            <button className="btn peq" onClick={() => a({ t: "resultado" })}>🏁 Terminar ya y ver resultados</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const Abrir = ({ a, texto = "▶️ Empezar" }: { a: A; texto?: string }) => (
+  <button className="btn prim grande" onClick={() => a({ t: "empezar" })}>{texto}</button>
+);
+
+function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "test" }>; a: A }) {
+  const v = h.estado.vivo;
+  const q = sub.preguntas[v.indice];
+  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primera pregunta (${sub.preguntas.length})`} />;
+  return (
+    <>
+      <div className="secreto" style={{ color: "var(--texto)", fontSize: "1.3em" }}>{q?.texto}</div>
+      <div className="col" style={{ gap: 6 }}>
+        {q?.opciones.map((o, i) => (
+          <div key={i} className={`op op${i % 4} ${i === q.correcta ? "correcta" : ""}`} style={{ padding: "8px 12px", fontSize: "1em", borderRadius: 10 }}>
+            {FORMAS[i % 4]} {o} {i === q.correcta && "✅"}
+            <span style={{ marginLeft: "auto" }}>
+              {h.contenido.equipos.filter((e) => v.respuestas[e.id]?.valor === i).map((e) => e.nombre).join(", ")}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="suave">Han contestado: {Object.keys(v.respuestas).length}/{h.contenido.equipos.length}</div>
+      <div className="fila">
+        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Revelar</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.preguntas.length ? "➡️ Siguiente pregunta" : "🏁 Resultados"}</button>}
+      </div>
+    </>
+  );
+}
+
+function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "precio" }>; a: A }) {
+  const v = h.estado.vivo;
+  const prod = sub.productos[v.indice];
+  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primer producto (${sub.productos.length})`} />;
+  return (
+    <>
+      <div className="fila">
+        <b style={{ fontSize: "1.3em" }}>{prod?.nombre}</b>
+        <span className="secreto">{prod?.precio} €</span>
+      </div>
+      <table className="tabla">
+        <tbody>
+          {h.contenido.equipos.map((e) => (
+            <tr key={e.id}>
+              <td><span className="punto" style={{ background: e.color }} /> {e.nombre}</td>
+              <td>{(v.respuestas[e.id]?.valor as number | undefined) ?? "—"} €</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="fila">
+        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Revelar precio</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.productos.length ? "➡️ Siguiente producto" : "🏁 Resultados"}</button>}
+      </div>
+    </>
+  );
+}
+
+function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "adivinar" }>; a: A }) {
+  const v = h.estado.vivo;
+  const corr = h.estado.correcciones[sub.id];
+  if (v.fase === "intro") return <Abrir a={a} texto={sub.segundos ? `▶️ Empezar (${sub.segundos} s)` : "▶️ Abrir respuestas"} />;
+  return (
+    <>
+      <div style={{ overflowX: "auto" }}>
+        <table className="tabla">
+          <thead>
+            <tr>
+              <th>{sub.estilo === "rosco" ? "Letra" : "Item"}</th>
+              <th>Solución</th>
+              {h.contenido.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre} {v.hojas[e.id]?.entregada ? "✅" : ""}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {sub.items.map((it, i) => (
+              <tr key={i}>
+                <td title={it.pregunta}>{it.etiqueta}</td>
+                <td className="suave">{it.respuesta}</td>
+                {h.contenido.equipos.map((e) => {
+                  const val = v.hojas[e.id]?.valores[i] ?? "";
+                  const ok = corr?.[e.id]?.[i];
+                  return (
+                    <td key={e.id}>
+                      {v.fase === "revelar" ? (
+                        <button className={`btn peq ${ok ? "ok" : "ko"}`} title="Cambiar corrección" onClick={() => a({ t: "correccion", equipo: e.id, item: i, ok: !ok })}>
+                          {ok ? "✓" : "✗"} {val || "—"}
+                        </button>
+                      ) : (
+                        val || <span className="suave">—</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {v.fase === "revelar" && <div className="suave">Pulsa una respuesta para darla por buena o mala.</div>}
+      <div className="fila">
+        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
+      </div>
+    </>
+  );
+}
+
+function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "cancion" }>; a: A }) {
+  const v = h.estado.vivo;
+  const c = sub.canciones[v.indice];
+  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primera canción (${sub.canciones.length})`} />;
+  const pulsado = equipoDe(h.publico, v.pulsado);
+  return (
+    <>
+      <div className="fila">
+        <span className="secreto">{c?.titulo}</span>
+        <span className="suave">— {c?.artista}</span>
+        {!c?.audio && <span className="chip">⚠️ sin MP3: ponla tú</span>}
+      </div>
+      <div className="fila">
+        <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "⏸️ Pausa" : "▶️ Reproducir"}</button>
+        {v.bloqueados.length > 0 && <span className="suave">Fallaron: {v.bloqueados.map((id) => equipoDe(h.publico, id)?.nombre).join(", ")}</span>}
+      </div>
+      {v.fase === "jugando" && pulsado && (
+        <div className="panel col" style={{ borderColor: pulsado.color }}>
+          <b style={{ fontSize: "1.4em", color: pulsado.color }}>🔔 Ha pulsado {pulsado.nombre}</b>
+          <div className="fila">
+            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}>✅ Acierto</button>
+            <button className="btn ko grande" onClick={() => a({ t: "fallo" })}>❌ Fallo (rebote)</button>
+          </div>
+        </div>
+      )}
+      <div className="fila">
+        {v.fase === "jugando" && !pulsado && <button className="btn oro" onClick={() => a({ t: "revelar" })}>👁️ Nadie la sabe: revelar</button>}
+        <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "➡️ Siguiente canción" : "🏁 Resultados"}</button>
+      </div>
+      <Crudos h={h} sub={sub} a={a} />
+    </>
+  );
+}
+
+function ControlTarjetas({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "tarjetas" }>; a: A }) {
+  const v = h.estado.vivo;
+  const t = sub.tarjetas[v.tarjeta];
+  const turno = equipoDe(h.publico, v.turno);
+  return (
+    <>
+      <div className="fila">
+        <span className="suave">Turno:</span>
+        {h.contenido.equipos.map((e) => (
+          <button key={e.id} className="btn" style={v.turno === e.id ? { background: e.color, color: "#fff" } : { borderColor: e.color }} onClick={() => a({ t: "turno", equipo: e.id })}>
+            {e.nombre} ({h.estado.crudo[sub.id]?.[e.id] ?? "–"})
+          </button>
+        ))}
+      </div>
+      {turno && v.fase === "intro" && <Abrir a={a} texto={`▶️ Empezar turno de ${turno.nombre} (${sub.segundos} s)`} />}
+      {turno && v.fase === "jugando" && (
+        <>
+          {t && (
+            <div className="tarjeta-host">
+              <div className="pal">{t.palabra}</div>
+              {t.condicion && <div style={{ marginTop: 6, fontWeight: 700 }}>{t.condicion}</div>}
+              {t.prohibidas && <div className="proh">{t.prohibidas.filter(Boolean).map((x) => <span key={x}>🚫 {x}</span>)}</div>}
+            </div>
+          )}
+          <div className="fila">
+            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}>✅ Acierto</button>
+            <button className="btn ko grande" onClick={() => a({ t: "pasar" })}>{sub.modo === "palabra" ? "🚫 Tabú / pasar" : "⏭️ Pasar"}</button>
+            <button className="btn" onClick={() => a({ t: "revelar" })}>⏹️ Fin del turno</button>
+          </div>
+        </>
+      )}
+      {turno && v.fase === "revelar" && <div className="suave">Turno terminado: {h.estado.crudo[sub.id]?.[turno.id] ?? 0} aciertos. Elige el siguiente equipo.</div>}
+      <Crudos h={h} sub={sub} a={a} />
+    </>
+  );
+}
+
+function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub, { tipo: "manual" }>; a: A; desfase: number }) {
+  const v = h.estado.vivo;
+  return (
+    <>
+      <div className="fila">
+        <span className="suave">Turno (opcional):</span>
+        <button className={`btn peq ${!v.turno ? "prim" : ""}`} onClick={() => a({ t: "turno", equipo: null })}>Todos</button>
+        {h.contenido.equipos.map((e) => (
+          <button key={e.id} className="btn peq" style={v.turno === e.id ? { background: e.color, color: "#fff" } : { borderColor: e.color }} onClick={() => a({ t: "turno", equipo: e.id })}>{e.nombre}</button>
+        ))}
+      </div>
+      {sub.cronometro && (
+        <div className="panel col">
+          <Crono c={v.cronometro} desfase={desfase} className="secreto" />
+          <div className="fila">
+            {v.cronometro.desde === null ? <button className="btn prim" onClick={() => a({ t: "crono", op: "start" })}>▶️ Cronómetro</button> : <button className="btn" onClick={() => a({ t: "crono", op: "stop" })}>⏸️ Parar</button>}
+            <button className="btn" onClick={() => a({ t: "crono", op: "reset" })}>🔄 A cero</button>
+          </div>
+          <div className="fila">
+            <span className="suave">Guardar tiempo de:</span>
+            {h.contenido.equipos.map((e) => (
+              <button key={e.id} className="btn peq" style={{ borderColor: e.color }} onClick={() => a({ t: "crono", op: "guardar", equipo: e.id })}>⏱️ {e.nombre}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="suave">{sub.mayorMejor ? "Gana el valor más alto." : "Gana el valor más bajo."} Sin valor = 0 puntos.</div>
+      <Crudos h={h} sub={sub} a={a} />
+    </>
+  );
+}
+
+/** Valores crudos editables a mano. */
+function Crudos({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
+  const crudo = h.estado.crudo[sub.id] ?? {};
+  const etiqueta = sub.tipo === "manual" ? sub.medida : sub.tipo === "test" && sub.puntuacion === "ranking" ? "Puntos" : "Aciertos";
+  return (
+    <table className="tabla">
+      <thead>
+        <tr>
+          <th>Equipo</th>
+          <th>{etiqueta}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {h.contenido.equipos.map((e) => (
+          <tr key={e.id}>
+            <td><span className="punto" style={{ background: e.color }} /> {e.nombre}</td>
+            <td>
+              <NumEdit valor={crudo[e.id]} onCambio={(n) => a({ t: "crudo", equipo: e.id, valor: n })} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function NumEdit({ valor, onCambio }: { valor: number | undefined; onCambio: (n: number | null) => void }) {
+  const [txt, setTxt] = useState(valor?.toString() ?? "");
+  useEffect(() => setTxt(valor?.toString() ?? ""), [valor]);
+  return (
+    <input
+      className="campo num"
+      inputMode="decimal"
+      value={txt}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={() => {
+        const t = txt.trim().replace(",", ".");
+        const n = t === "" ? null : Number(t);
+        if (n === null || Number.isFinite(n)) {
+          if (n !== (valor ?? null)) onCambio(n);
+        } else setTxt(valor?.toString() ?? "");
+      }}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+    />
+  );
+}
+
+function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
+  const p = h.publico;
+  const confirmado = h.estado.puntos[sub.id];
+  const [puntos, setPuntos] = useState<Record<string, number>>(p.ranking ?? {});
+  const clave = JSON.stringify(p.ranking);
+  useEffect(() => setPuntos(p.ranking ?? {}), [clave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <>
+      <table className="tabla">
+        <thead>
+          <tr>
+            <th>Equipo</th>
+            <th>{etiquetaCrudo(p)}</th>
+            <th>Puntos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {h.contenido.equipos.map((e) => (
+            <tr key={e.id}>
+              <td><span className="punto" style={{ background: e.color }} /> {e.nombre}</td>
+              <td><NumEdit valor={h.estado.crudo[sub.id]?.[e.id]} onCambio={(n) => a({ t: "crudo", equipo: e.id, valor: n })} /></td>
+              <td>
+                {confirmado ? (
+                  <b className="secreto" style={{ fontSize: "1.2em" }}>{confirmado[e.id] ?? 0}</b>
+                ) : (
+                  <input className="campo num" inputMode="numeric" value={puntos[e.id] ?? 0} onChange={(ev) => setPuntos({ ...puntos, [e.id]: Number(ev.target.value) || 0 })} />
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="fila">
+        {confirmado ? (
+          <>
+            <span className="chip">✅ Puntos sumados al marcador</span>
+            <button className="btn peq" onClick={() => a({ t: "desconfirmar" })}>Quitar del marcador</button>
+          </>
+        ) : (
+          <button className="btn ok grande" onClick={() => a({ t: "confirmar", puntos })}>✅ Confirmar y sumar al marcador</button>
+        )}
+      </div>
+      {!confirmado && <div className="suave">Puedes cambiar los puntos antes de confirmar (empates, penalizaciones…).</div>}
+    </>
+  );
+}
+
+function Marcador({ h, a }: { h: VistaHost; a: A }) {
+  const [eq, setEq] = useState(h.contenido.equipos[0]?.id ?? "");
+  const [pts, setPts] = useState("");
+  const [motivo, setMotivo] = useState("");
+  return (
+    <div className="panel col">
+      <h3>Marcador</h3>
+      <div style={{ overflowX: "auto" }}>
+        <table className="tabla">
+          <thead>
+            <tr>
+              <th />
+              {h.publico.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {h.publico.desglose.map((f) => (
+              <tr key={f.pruebaId}>
+                <td>{f.emoji} {f.titulo}</td>
+                {h.publico.equipos.map((e) => <td key={e.id}>{f.puntos[e.id] ?? 0}</td>)}
+              </tr>
+            ))}
+            <tr>
+              <td><b>Total</b></td>
+              {h.publico.equipos.map((e) => <td key={e.id}><b className="secreto" style={{ fontSize: "1.2em" }}>{e.total}</b></td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <form
+        className="fila"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          const n = Number(pts);
+          if (!pts || !Number.isFinite(n)) return;
+          a({ t: "ajuste", equipo: eq, puntos: n, motivo });
+          setPts("");
+          setMotivo("");
+        }}
+      >
+        <select className="campo" style={{ width: "auto" }} value={eq} onChange={(e) => setEq(e.target.value)}>
+          {h.contenido.equipos.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+        </select>
+        <input className="campo num" inputMode="numeric" placeholder="±pts" value={pts} onChange={(e) => setPts(e.target.value)} />
+        <input className="campo" style={{ flex: 1, minWidth: 120 }} placeholder="Motivo (bonus, penalización…)" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+        <button className="btn">Ajustar</button>
+      </form>
+      {h.estado.ajustes.map((aj, i) => (
+        <div key={i} className="fila suave">
+          {aj.puntos > 0 ? "+" : ""}{aj.puntos} {equipoDe(h.publico, aj.equipo)?.nombre} — {aj.motivo || "sin motivo"}
+          <button className="btn peq" onClick={() => a({ t: "quitarAjuste", i })}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Peligro({ a }: { a: A }) {
+  return (
+    <details className="panel">
+      <summary className="suave">Opciones avanzadas</summary>
+      <div className="fila" style={{ marginTop: 10 }}>
+        <button className="btn peq" onClick={() => confirm("¿Borrar los resultados de esta prueba?") && a({ t: "limpiarSub" })}>🧹 Repetir esta prueba desde cero</button>
+        <button className="btn peq" onClick={() => confirm("¿Nuevo código? Los móviles tendrán que volver a entrar.") && a({ t: "codigo" })}>🔑 Nuevo código</button>
+        <button className="btn peq ko" onClick={() => confirm("¿Borrar TODA la partida (puntos incluidos)?") && a({ t: "reiniciar" })}>💣 Reiniciar partida</button>
+      </div>
+    </details>
+  );
+}

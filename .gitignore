@@ -1,0 +1,9 @@
+node_modules
+dist
+data/estado.json
+data/contenido.json
+data/media
+test-results
+playwright-report
+.env
+.e2e-datos
