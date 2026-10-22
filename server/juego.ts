@@ -1,6 +1,6 @@
 // Motor del concurso: estado + acciones del presentador y de los equipos. Sin E/S: el servidor persiste y emite.
 import { BONUS_RAPIDEZ, coincide, desglose, puntosPrecio, puntosSub, puntosTest, totales } from "../shared/puntuacion.ts";
-import { porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo } from "../shared/tipos.ts";
+import { fragmento, porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo } from "../shared/tipos.ts";
 
 export type AccionHost =
   | { t: "ir"; subId: string | null }
@@ -30,7 +30,9 @@ export type AccionHost =
   | { t: "deCero" }
   | { t: "siguientePrueba" }
   | { t: "siguienteTurno" }
-  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez"; valor: number | boolean };
+  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez" | "fragmento"; valor: number | boolean }
+  | { t: "podioPaso" }
+  | { t: "repetir" };
 
 export type AccionEquipo =
   | { t: "responder"; valor: number }
@@ -259,6 +261,10 @@ export class Juego {
     switch (acc.t) {
       case "vista":
         if (["juego", "marcador", "podio"].includes(acc.v)) v.vista = acc.v;
+        if (acc.v === "podio") v.podioPaso = 0; // el final se revela por pasos
+        return;
+      case "podioPaso":
+        v.podioPaso = Math.min((v.podioPaso ?? 0) + 1, this.pasosPodio());
         return;
       case "ir":
         this.irA(acc.subId);
@@ -381,6 +387,10 @@ export class Juego {
       case "sonar":
         v.sonando = acc.on;
         return;
+      case "repetir":
+        v.repetir = (v.repetir ?? 0) + 1;
+        v.sonando = true;
+        return;
       case "acierto":
         if (sub.tipo === "cancion" && v.pulsado && v.fase === "jugando") {
           this.sumar(sub.id, v.pulsado, 1);
@@ -434,6 +444,7 @@ export class Juego {
         if (acc.campo === "segundos" && sub.tipo !== "cancion" && n >= 0 && n <= 600) sub.segundos = n;
         if (acc.campo === "tarjetaEnTv" && sub.tipo === "tarjetas") sub.tarjetaEnTv = !!acc.valor;
         if (acc.campo === "rapidez" && sub.tipo === "test") sub.rapidez = !!acc.valor;
+        if (acc.campo === "fragmento" && sub.tipo === "cancion" && n >= 0 && n <= 600) sub.fragmento = n;
         return;
       }
       case "mas":
@@ -441,6 +452,21 @@ export class Juego {
         else if (v.fase === "jugando") v.fin = ahora + acc.segundos * 1000;
         return;
     }
+  }
+
+  /** Pasos del podio: un paso por puesto distinto (los empatados se revelan juntos). */
+  pasosPodio(): number {
+    return new Set(Object.values(totales(this.contenido, this.estado))).size;
+  }
+
+  /** Un equipo se pone nombre desde su móvil. Devuelve true si cambió (hay que guardar el contenido). */
+  renombrar(eq: EquipoId, nombre: unknown): boolean {
+    const n = String(nombre ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
+    const e = this.contenido.equipos.find((x) => x.id === eq);
+    if (!e || !n || n === e.nombre) return false;
+    e.nombre = n;
+    this.contenido.rev = (this.contenido.rev ?? 0) + 1;
+    return true;
   }
 
   /** Acción de un equipo. Devuelve true si cambió el estado. */
@@ -518,6 +544,8 @@ export class Juego {
       sonando: v.sonando,
       turno: v.turno,
       cronometro: v.cronometro,
+      podioPaso: v.podioPaso ?? 0,
+      repetir: v.repetir ?? 0,
       crudo: {},
       confirmado: false,
       desglose: desglose(this.contenido, e),
@@ -588,8 +616,9 @@ export class Juego {
       }
     } else if (sub.tipo === "cancion") {
       const c = sub.canciones[v.indice];
+      base.audiosSub = sub.canciones.map((x) => x.audio).filter((x): x is string => !!x);
       if (c && v.fase !== "intro") {
-        if (c.audio) base.audio = { src: c.audio, inicio: c.inicio };
+        if (c.audio) base.audio = { src: c.audio, inicio: c.inicio, fragmento: fragmento(sub) };
         if (v.fase === "revelar") {
           base.solucion = { texto: `${c.titulo} — ${c.artista}` };
           base.ganadores = v.acertante ? [v.acertante] : [];

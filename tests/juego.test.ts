@@ -328,3 +328,40 @@ describe("flujo", () => {
     expect(j.publico().ganadores).toEqual(["verde"]);
   });
 });
+
+describe("extras", () => {
+  it("los equipos se ponen nombre (recortado, no vacío) y sube la revisión", () => {
+    const { j, c } = partida();
+    expect(j.renombrar("azul", "   Los   Cachimberos de la noche que más fuman  ")).toBe(true);
+    expect(c.equipos[1].nombre).toBe("Los Cachimberos de l");
+    expect(c.rev).toBe(1);
+    expect(j.renombrar("azul", "   ")).toBe(false);
+    expect(j.renombrar("nadie", "X")).toBe(false);
+  });
+
+  it("podio por pasos: empieza en 0 y no pasa del número de puestos distintos", () => {
+    const { j } = partida();
+    j.host({ t: "ajuste", equipo: "rojo", puntos: 10, motivo: "" });
+    j.host({ t: "ajuste", equipo: "azul", puntos: 10, motivo: "" });
+    j.host({ t: "vista", v: "podio" });
+    expect(j.publico().podioPaso).toBe(0);
+    for (let i = 0; i < 5; i++) j.host({ t: "podioPaso" });
+    expect(j.publico().podioPaso).toBe(2); // 0 puntos (verde, amarillo) y 10 (rojo y azul empatados)
+  });
+
+  it("canción: fragmento y lista para precargar", () => {
+    const { j, c } = partida();
+    const rap = c.pruebas[3].subs[1];
+    if (rap.tipo !== "cancion") throw new Error();
+    rap.canciones[0].audio = "/media/a.mp3";
+    rap.canciones[2].audio = "/media/b.mp3";
+    j.host({ t: "ir", subId: "c-rap" });
+    j.host({ t: "config", campo: "fragmento", valor: 12 });
+    j.host({ t: "empezar" });
+    const p = j.publico();
+    expect(p.audio).toEqual({ src: "/media/a.mp3", inicio: 0, fragmento: 12 });
+    expect(p.audiosSub).toEqual(["/media/a.mp3", "/media/b.mp3"]);
+    j.host({ t: "repetir" });
+    expect(j.publico()).toMatchObject({ repetir: 1, sonando: true });
+  });
+});

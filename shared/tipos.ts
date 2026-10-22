@@ -53,7 +53,7 @@ export type Sub =
   // modo «porItem» (por defecto): una letra/mezcla cada vez con su cuenta atrás; «hoja»: todo a la vez
   | (SubBase & { tipo: "adivinar"; estilo: "lista" | "rosco"; modo?: "porItem" | "hoja"; segundosItem?: number; opciones: string[]; segundos: number; items: ItemAdivinar[] })
   | (SubBase & { tipo: "precio"; sinPasarse: boolean; segundos: number; productos: Producto[] })
-  | (SubBase & { tipo: "cancion"; canciones: Cancion[] })
+  | (SubBase & { tipo: "cancion"; fragmento?: number; canciones: Cancion[] }) // fragmento: segundos que suena (0 = entera)
   | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; tarjetaEnTv?: boolean; segundos: number; tarjetas: Tarjeta[] })
   | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean; segundos?: number });
 
@@ -101,6 +101,8 @@ export interface Vivo {
   bloqueados: EquipoId[];
   sonando: boolean;
   acertante?: EquipoId | null; // canción: quién la acertó
+  podioPaso?: number; // podio: cuántos puestos se han revelado (empezando por el último)
+  repetir?: number; // canción: sube cada vez que el presentador repite el fragmento
   // tarjetas y manual
   turno: EquipoId | null;
   tarjeta: number; // índice global de tarjeta
@@ -171,7 +173,10 @@ export interface Publico {
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
   sonando: boolean;
-  audio?: { src: string; inicio: number };
+  audio?: { src: string; inicio: number; fragmento: number };
+  audiosSub?: string[]; // para precargar los MP3 de la ronda
+  podioPaso: number;
+  repetir: number;
   turno: EquipoId | null;
   condicion?: string;
   tarjeta?: Tarjeta; // solo TV y presentador, nunca a los móviles
@@ -202,3 +207,4 @@ export interface VistaHost {
 export const porItem = (s: Extract<Sub, { tipo: "adivinar" }>) => (s.modo ?? "porItem") === "porItem";
 export const segundosItem = (s: Extract<Sub, { tipo: "adivinar" }>) => s.segundosItem ?? 20;
 export const tarjetaEnTv = (s: Extract<Sub, { tipo: "tarjetas" }>) => s.tarjetaEnTv ?? true;
+export const fragmento = (s: Extract<Sub, { tipo: "cancion" }>) => s.fragmento ?? 20;

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
-import { porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
+import { fragmento, porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
-import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS, fmt } from "../components/comun.tsx";
+import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS, fmt, gruposPodio } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function usePin() {
@@ -83,6 +83,7 @@ export function Presentador() {
             ))}
             <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}>↩️ Deshacer</button>
           </div>
+          {p.vista === "podio" && <PodioControl h={h} a={a} />}
           <div className="atajos suave">
             Atajos: <kbd>Espacio</kbd> siguiente paso · <kbd>Z</kbd> deshacer · <kbd>J</kbd> juego · <kbd>M</kbd> marcador · <kbd>P</kbd> podio
           </div>
@@ -303,7 +304,7 @@ function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: 
 }
 
 /** Segundos ajustables en directo (se guardan en el contenido; valen desde la siguiente pregunta/turno). */
-function Segundos({ valor, etiqueta, a, campo, jugando }: { valor: number; etiqueta: string; a: A; campo: "segundos" | "segundosItem"; jugando: boolean }) {
+function Segundos({ valor, etiqueta, a, campo, jugando }: { valor: number; etiqueta: string; a: A; campo: "segundos" | "segundosItem" | "fragmento"; jugando: boolean }) {
   const poner = (n: number) => a({ t: "config", campo, valor: Math.max(0, Math.min(600, n)) });
   return (
     <div className="fila">
@@ -432,17 +433,26 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
 function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "cancion" }>; a: A }) {
   const v = h.estado.vivo;
   const c = sub.canciones[v.indice];
-  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primera canción (${sub.canciones.length})`} />;
+  const frag = <Segundos valor={fragmento(sub)} etiqueta="Fragmento (0 = entera)" campo="fragmento" a={a} jugando={v.fase === "jugando"} />;
+  if (v.fase === "intro")
+    return (
+      <>
+        {frag}
+        <Abrir a={a} texto={`▶️ Primera canción (${sub.canciones.length})`} />
+      </>
+    );
   const pulsado = equipoDe(h.publico, v.pulsado);
   return (
     <>
+      {frag}
       <div className="fila">
         <span className="secreto">{c?.titulo}</span>
         <span className="suave">— {c?.artista}</span>
         {!c?.audio && <span className="chip">⚠️ sin MP3: ponla tú</span>}
       </div>
       <div className="fila">
-        <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "⏸️ Pausa" : "▶️ Reproducir"}</button>
+        <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "⏸️ Pausa" : "▶️ Seguir"}</button>
+        <button className="btn" onClick={() => a({ t: "repetir" })}>🔁 Repetir fragmento</button>
         {v.bloqueados.length > 0 && <span className="suave">Fallaron: {v.bloqueados.map((id) => equipoDe(h.publico, id)?.nombre).join(", ")}</span>}
       </div>
       {v.fase === "jugando" && pulsado && (
@@ -651,6 +661,22 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
         <button className="btn" onClick={() => a({ t: "vista", v: "marcador" })}>📊 Enseñar marcador</button>
       </div>
     </>
+  );
+}
+
+/** El final: revelar puestos de último a primero (Espacio). */
+function PodioControl({ h, a }: { h: VistaHost; a: A }) {
+  const grupos = gruposPodio(h.publico.equipos);
+  const paso = h.publico.podioPaso;
+  if (paso >= grupos.length) return <div className="chip" style={{ width: "100%" }}>🏆 Ganador revelado. <button className="btn peq" onClick={() => a({ t: "vista", v: "podio" })}>Repetir el final</button></div>;
+  const sig = grupos[paso];
+  const empate = sig.ids.length > 1 ? ` (empate de ${sig.ids.length})` : "";
+  return (
+    <div className="fila" style={{ width: "100%" }}>
+      <button className="btn oro grande" data-principal onClick={() => a({ t: "podioPaso" })}>
+        {paso === grupos.length - 1 ? `🥁 ¡Revelar al GANADOR!${empate}` : `🥁 Revelar el ${sig.puesto}º puesto${empate}`}
+      </button>
+    </div>
   );
 }
 

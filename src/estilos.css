@@ -144,9 +144,11 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .crono { font-size: 16vh; font-weight: 800; font-variant-numeric: tabular-nums; }
 
 .podio { display: flex; align-items: flex-end; gap: 2vw; height: 60vh; }
-.podio .peana { width: 18vw; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding-top: 2vh; font-weight: 800; color: #fff; animation: sube 1s cubic-bezier(.2,.9,.3,1.2) both; }
+.podio .peana { width: 18vw; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding-top: 2vh; font-weight: 800; color: #fff; transition: height 1.2s cubic-bezier(.2,.9,.3,1.2), background 0.4s; }
+.podio .peana.oculta { background: repeating-linear-gradient(45deg, var(--panel), var(--panel) 12px, var(--panel2) 12px, var(--panel2) 24px); color: var(--suave); }
+.podio .peana.vista { animation: pop 0.5s; }
 .podio .peana .pos { font-size: 9vh; }
-.podio .peana .nom { font-size: 4vh; }
+.podio .peana .nom { font-size: 3.6vh; text-align: center; padding: 0 1vw; line-height: 1.1; }
 .podio .peana .pt { font-size: 3.4vh; opacity: 0.9; }
 @keyframes sube { from { transform: scaleY(0); transform-origin: bottom; } }
 
@@ -214,3 +216,14 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .banda-conexion { position: sticky; top: 0; z-index: 20; background: var(--ko); color: #fff; text-align: center; font-weight: 700; padding: 8px; border-radius: 10px; animation: latido 0.8s infinite alternate; }
 .atajos { font-size: 0.8em; }
 .atajos kbd { background: var(--panel2); border: 1px solid var(--borde); border-radius: 5px; padding: 1px 6px; font-family: inherit; }
+.barra-frag { width: 50vw; height: 1.6vh; border-radius: 99px; background: #ffffff22; overflow: hidden; }
+.barra-frag > div { height: 100%; background: var(--acento); transition: width 0.25s linear; }
+.nombre-btn { background: transparent; border: 0; color: inherit; font-weight: 800; padding: 0; text-align: left; }
+.clasif { position: relative; width: min(90vw, 1400px); }
+.clasif-fila { position: absolute; left: 0; right: 0; display: grid; grid-template-columns: 7vh 1fr 12vh 14vh; align-items: center; gap: 1.5vw; transition: top 1s cubic-bezier(.4,1.4,.5,1); font-weight: 800; }
+.clasif-pos { font-size: 4.4vh; color: var(--suave); }
+.clasif-barra { height: 100%; background: #ffffff10; border-radius: 14px; overflow: hidden; }
+.clasif-barra > div { height: 100%; border-radius: 14px; display: flex; align-items: center; padding-left: 1.5vw; transition: width 1.2s ease; white-space: nowrap; font-size: 3.6vh; color: #fff; text-shadow: 0 2px 6px #0008; }
+.clasif-pts { font-size: 5vh; text-align: right; font-variant-numeric: tabular-nums; }
+.clasif-delta { font-size: 3vh; }
+.clasif-delta .mas { color: var(--oro); animation: pop 0.5s; }

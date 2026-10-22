@@ -383,7 +383,10 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
         )}
         {sub.tipo === "cancion" && (
           <>
-            <div className="suave">Sube el MP3 de cada canción y el segundo desde el que empieza a sonar (para saltarte la intro o empezar por el estribillo). Suena en la TV.</div>
+            <div className="fila">
+              <Campo etiqueta="Segundos que suena cada fragmento (0 = entera)"><Numero v={sub.fragmento ?? 20} on={(fragmento) => set({ fragmento })} /></Campo>
+            </div>
+            <div className="suave">Sube el MP3 de cada canción y el segundo desde el que empieza a sonar (para saltarte la intro o empezar por el estribillo). Suena en la TV el fragmento y se para sola; al revelar sigue sonando.</div>
             <Lista<Cancion>
               nombre="Canción"
               items={sub.canciones}

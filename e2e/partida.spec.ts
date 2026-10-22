@@ -3,13 +3,30 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 const FOTOS = process.env.FOTOS; // carpeta para capturas de revisión (opcional)
 const foto = async (p: Page, n: string) => FOTOS && p.screenshot({ path: `${FOTOS}/${n}.png` });
 
-async function movil(browser: Browser, codigo: string, equipo: string) {
+async function movil(browser: Browser, codigo: string, equipo: string, nombre?: string) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
   const p = await ctx.newPage();
   await p.goto(`/?c=${codigo}`);
   await p.getByRole("button", { name: equipo }).click();
-  await expect(p.locator(".movil-cab")).toContainText(equipo);
+  // la primera vez piden nombre de equipo
+  if (nombre) {
+    await p.getByPlaceholder(equipo).fill(nombre);
+    await p.getByRole("button", { name: "Guardar" }).click();
+  } else await p.getByRole("button", { name: `Dejar «${equipo}»` }).click();
+  await expect(p.locator(".movil-cab")).toContainText(nombre ?? equipo);
   return p;
+}
+
+/** WAV de prueba (3 s de tono) para subirlo como canción. */
+function wav(segundos: number): Buffer {
+  const hz = 8000;
+  const n = hz * segundos;
+  const b = Buffer.alloc(44 + n);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + n, 4); b.write("WAVE", 8); b.write("fmt ", 12);
+  b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(hz, 24);
+  b.writeUInt32LE(hz, 28); b.writeUInt16LE(1, 32); b.writeUInt16LE(8, 34); b.write("data", 36); b.writeUInt32LE(n, 40);
+  for (let i = 0; i < n; i++) b[44 + i] = 128 + Math.round(40 * Math.sin((2 * Math.PI * 440 * i) / hz));
+  return b;
 }
 
 test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
@@ -26,7 +43,21 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByRole("button", { name: "Entrar" }).click();
   await expect(host.getByText(`Código ${codigo}`)).toBeVisible();
 
-  const [rojo, azul, verde, amarillo] = await Promise.all(["Rojo", "Azul", "Verde", "Amarillo"].map((e) => movil(browser, codigo, e)));
+  // Antes de empezar: la primera canción del rap con un audio de 3 s y fragmento de 1 s
+  const h = { "x-pin": "1234" };
+  const subida = await host.request.post("/api/admin/subir", { headers: h, multipart: { archivo: { name: "prueba.wav", mimeType: "audio/wav", buffer: wav(3) } } });
+  const { url } = await subida.json();
+  expect((await host.request.get(url)).headers()["cache-control"]).toContain("immutable");
+  const cont = await (await host.request.get("/api/admin/contenido", { headers: h })).json();
+  const rap = cont.pruebas.flatMap((x: { subs: { id: string }[] }) => x.subs).find((x: { id: string }) => x.id === "c-rap");
+  rap.fragmento = 1;
+  rap.canciones[0].audio = url;
+  expect((await host.request.put("/api/admin/contenido", { headers: h, data: cont })).status()).toBe(200);
+
+  const [rojo, azul, verde, amarillo] = await Promise.all(
+    ["Rojo", "Azul", "Verde", "Amarillo"].map((e) => movil(browser, codigo, e, e === "Amarillo" ? "Los Cachimberos" : undefined)),
+  );
+  await expect(tv.locator(".tv-pie")).toContainText("Los Cachimberos");
   await expect(tv.getByText("✅ 1 móvil").first()).toBeVisible();
   await foto(tv, "tv-lobby");
   await foto(rojo, "movil-espera");
@@ -57,11 +88,14 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(tv.locator(".tv-eq").filter({ hasText: "Rojo" })).toContainText("1,5");
   await expect(tv.locator(".tv-eq").filter({ hasText: "Azul" })).toContainText("1,25");
   await expect(host.getByText("Puntos automáticos, ya en el marcador")).toBeVisible();
+  await expect(tv.getByText("Clasificación general")).toBeVisible({ timeout: 9000 });
+  await tv.waitForTimeout(1500);
+  await foto(tv, "tv-clasificacion");
   // atajos: M enseña el marcador, J vuelve al juego
   await host.keyboard.press("m");
   await expect(tv.locator(".desglose")).toBeVisible();
   await host.keyboard.press("j");
-  await expect(tv.locator(".tabla-res")).toBeVisible();
+  await expect(tv.locator(".tabla-res, .clasif").first()).toBeVisible();
   // volver a una prueba jugada ofrece continuar en lugar de sumar otra vez
   await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
   await host.locator(".host-nav").getByRole("button", { name: /Cultura general/ }).click();
@@ -75,6 +109,9 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
   await host.getByRole("button", { name: /Primera canción/ }).click();
   await foto(verde, "movil-pulsador");
+  // el fragmento (1 s) se para solo
+  await expect(tv.getByText(/Fin del fragmento/)).toBeVisible({ timeout: 6000 });
+  await foto(tv, "tv-fragmento");
   await verde.locator(".pulsador").dispatchEvent("pointerdown");
   await expect(tv.locator(".pulsado")).toHaveText("Verde");
   await expect(rojo.locator(".pulsador")).toBeDisabled();
@@ -167,8 +204,17 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await foto(tv, "tv-marcador");
   await host.getByRole("button", { name: "🏆 Podio" }).click();
   await expect(tv.locator(".podio")).toBeVisible();
+  await expect(tv.getByText("¿Quién ganará?")).toBeVisible();
+  await expect(tv.locator(".peana.vista")).toHaveCount(0);
+  await foto(tv, "tv-podio-0");
+  await host.keyboard.press(" ");
+  await expect(tv.locator(".peana.vista").first()).toBeVisible();
+  for (let i = 0; i < 4 && (await tv.locator(".con-confeti").count()) === 0; i++) await host.keyboard.press(" ");
+  await expect(tv.locator(".con-confeti")).toBeVisible();
+  await expect(tv.locator(".tv-titulo")).toContainText("gana");
   await tv.waitForTimeout(1500);
   await foto(tv, "tv-podio");
+  await foto(rojo, "movil-podio");
   await foto(host, "host-general");
 
   // --- El estado sobrevive a recargar

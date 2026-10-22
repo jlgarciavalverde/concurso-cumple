@@ -106,13 +106,13 @@ app.post("/api/admin/subir", async (req, reply) => {
   return { url: `/media/${nombre}` };
 });
 
-// Cloudflare cachea por extensión (.mp3, .jpg…) aunque el origen diga otra cosa; no-store sí lo respeta
 await app.register(fastifyStatic, {
   root: MEDIA,
   prefix: "/media/",
   decorateReply: false,
   cacheControl: false,
-  setHeaders: (res) => void res.header("Cache-Control", "no-store"),
+  // Cada subida tiene nombre aleatorio nuevo y nunca se sobrescribe: se puede cachear para siempre (y precargar)
+  setHeaders: (res) => void res.header("Cache-Control", "public, max-age=31536000, immutable"),
 });
 if (existsSync(WEB)) {
   await app.register(fastifyStatic, { root: WEB, prefix: "/", wildcard: false });
@@ -214,6 +214,11 @@ io.on("connection", (socket) => {
     } else {
       socket.join(`eq:${eq}`);
       let ultima = 0;
+      socket.on("nombre", (nombre: unknown) => {
+        if (juego.estado.codigo !== codigo || !juego.renombrar(eq, nombre)) return;
+        escribir(fContenido, juego.contenido);
+        emitir();
+      });
       socket.on("equipo", (acc: AccionEquipo) => {
         // Contra dobles toques en las respuestas tipo test/precio; hoja, entregar y pulsador van sin freno
         if (acc?.t === "responder") {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
-import { conColor, Cuenta, equipoDe, FORMAS, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
+import confetti from "canvas-confetti";
+import { conColor, Cuenta, equipoDe, FORMAS, gruposPodio, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function Jugar() {
@@ -8,6 +9,7 @@ export function Jugar() {
   const [codigo, setCodigo] = useState((url ?? guardado.leer("codigo") ?? "").toUpperCase());
   const [equipo, setEquipo] = useState(guardado.leer("equipo") ?? "");
   const [enviado, setEnviado] = useState(codigo.length === 4);
+  const [nombrando, setNombrando] = useState(false);
   const auth = enviado ? { rol: "equipo", codigo, equipo } : null;
   const { datos, error, conectado, desfase, enviar } = useCanal<VistaEquipo | Publico>(auth, "equipo");
 
@@ -61,6 +63,7 @@ export function Jugar() {
                 onClick={() => {
                   guardado.poner("equipo", e.id);
                   setEquipo(e.id);
+                  if (!guardado.leer(`nombrado-${codigo}-${e.id}`)) setNombrando(true); // primera vez: que se pongan nombre
                 }}
               >
                 {e.nombre}
@@ -78,11 +81,22 @@ export function Jugar() {
       {!conectado && <div className="banda-conexion">📡 Reconectando… no cerréis la página</div>}
       <Avisos v={v} />
       <div className="movil-cab" style={{ background: yo.color }}>
-        <span>{yo.nombre}</span>
+        <button className="nombre-btn" onClick={() => setNombrando(true)} aria-label="Cambiar el nombre del equipo">{yo.nombre} ✏️</button>
         <span>{fmt(yo.total)} pts</span>
       </div>
       <div className="movil-cuerpo">
-        <Cuerpo v={v} desfase={desfase} enviar={(a) => enviar("equipo", a)} />
+        {nombrando ? (
+          <Nombre
+            actual={yo.nombre}
+            onGuardar={(n) => {
+              if (n.trim()) enviar("nombre", n.trim());
+              guardado.poner(`nombrado-${v.codigo}-${yo.id}`, "1");
+              setNombrando(false);
+            }}
+          />
+        ) : (
+          <Cuerpo v={v} desfase={desfase} enviar={(a) => enviar("equipo", a)} />
+        )}
       </div>
       <button
         className="btn peq"
@@ -111,6 +125,40 @@ function Espera({ emoji = "👀", texto }: { emoji?: string; texto: string }) {
 }
 
 /** Pantalla encendida y vibración cuando hay que hacer algo (pregunta nueva, os toca…). */
+function Nombre({ actual, onGuardar }: { actual: string; onGuardar: (n: string) => void }) {
+  const [txt, setTxt] = useState("");
+  return (
+    <form
+      className="panel col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onGuardar(txt);
+      }}
+    >
+      <div className="espera"><div className="grande">🏷️</div>¿Cómo se llama vuestro equipo?</div>
+      <input className="campo" style={{ fontSize: "1.3em" }} maxLength={20} autoFocus placeholder={actual} value={txt} onChange={(e) => setTxt(e.target.value)} />
+      <button className="btn prim grande" disabled={!txt.trim()}>Guardar</button>
+      <button type="button" className="btn" onClick={() => onGuardar("")}>Dejar «{actual}»</button>
+    </form>
+  );
+}
+
+/** En el final: vuestro puesto solo cuando el presentador lo revela (y confeti si habéis ganado). */
+function PodioMovil({ v }: { v: VistaEquipo }) {
+  const grupos = gruposPodio(v.equipos);
+  const i = grupos.findIndex((g) => g.ids.includes(v.yo));
+  const revelado = i >= 0 && i < v.podioPaso;
+  const ganador = revelado && i === grupos.length - 1;
+  useEffect(() => {
+    if (!ganador) return;
+    navigator.vibrate?.([200, 100, 200, 100, 400]);
+    void confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
+  }, [ganador]);
+  if (!revelado) return <Espera emoji="🥁" texto="Redoble de tambores… ¡mirad la pantalla!" />;
+  if (ganador) return <Espera emoji="🏆" texto="¡¡HABÉIS GANADO!!" />;
+  return <Espera emoji={grupos[i].puesto === 2 ? "🥈" : grupos[i].puesto === 3 ? "🥉" : "👏"} texto={`¡Sois ${grupos[i].puesto}º con ${fmt(grupos[i].total)} puntos!`} />;
+}
+
 function Avisos({ v }: { v: VistaEquipo }) {
   useWakeLock(true);
   const abierta = v.fase === "jugando" ? `${v.sub?.id}:${v.indice}:${v.abiertaEn}` : null;
@@ -134,7 +182,7 @@ function Posicion({ v }: { v: VistaEquipo }) {
 
 function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
   const s = v.sub;
-  if (v.vista === "podio") return <><Espera emoji="🏆" texto="¡Mirad el podio!" /><Posicion v={v} /></>;
+  if (v.vista === "podio") return <PodioMovil v={v} />;
   if (v.vista === "marcador") return <><Espera emoji="📊" texto="Marcador en la pantalla" /><Posicion v={v} /></>;
   if (!s) return <><Espera emoji="⏳" texto="Esperando a que empiece la siguiente prueba…" /><Posicion v={v} /></>;
   if (v.fase === "resultado") {

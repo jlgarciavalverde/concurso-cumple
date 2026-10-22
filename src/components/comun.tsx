@@ -122,6 +122,8 @@ export const sonidos = {
     setTimeout(() => pitido(1320, 0.25, "sine"), 110);
   },
   pulsador: () => pitido(660, 0.35),
+  redoble: () => {},
+  fanfarria: () => {},
 };
 
 /** Tic en los últimos 5 s y bocina al llegar a 0. */
@@ -144,3 +146,26 @@ export function useSonidosCuenta(fin: number | null, desfase: number, activo: bo
     return () => clearInterval(id);
   }, [fin, activo]);
 }
+
+/** Grupos del podio de peor a mejor (los empatados van juntos), con su puesto. */
+export function gruposPodio(equipos: Publico["equipos"]) {
+  const totales = [...new Set(equipos.map((e) => e.total))].sort((a, b) => a - b);
+  return totales.map((total) => ({
+    total,
+    puesto: equipos.filter((e) => e.total > total).length + 1,
+    ids: equipos.filter((e) => e.total === total).map((e) => e.id),
+  }));
+}
+
+Object.assign(sonidos, {
+  redoble: () => {
+    for (let i = 0; i < 14; i++) setTimeout(() => pitido(110 + (i % 2) * 8, 0.06, "triangle"), i * 55);
+  },
+  fanfarria: () => {
+    const notas: [number, number, number][] = [
+      [523, 0, 0.15], [659, 150, 0.15], [784, 300, 0.15], [1047, 450, 0.35],
+      [784, 820, 0.12], [1047, 950, 0.6],
+    ];
+    for (const [f, t, d] of notas) setTimeout(() => pitido(f, d, "square"), t);
+  },
+});
