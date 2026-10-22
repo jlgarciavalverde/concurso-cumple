@@ -1,20 +1,29 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Marca, Publico } from "../../shared/tipos.ts";
-import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, pitido, posRosco, fmt } from "../components/comun.tsx";
-import { useCanal } from "../socket.ts";
+import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, posRosco, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
+import { guardado, useCanal } from "../socket.ts";
 
 const AUTH = { rol: "tv" };
 
 export function Tv() {
   const { datos: p, desfase, conectado } = useCanal<Publico>(AUTH, "publico");
   const [activa, setActiva] = useState(false);
+  const [mudo, setMudo] = useState(guardado.leer("tv-mudo") === "1");
   const pulsadoPrev = useRef<string | null>(null);
+  const suena = activa && !mudo;
 
+  useWakeLock(activa);
+  useSonidosCuenta(p?.fase === "jugando" ? p.fin : null, desfase, suena);
   useEffect(() => {
-    if (p?.pulsado && p.pulsado !== pulsadoPrev.current) pitido(660, 0.35);
+    if (suena && p?.pulsado && p.pulsado !== pulsadoPrev.current) sonidos.pulsador();
     pulsadoPrev.current = p?.pulsado ?? null;
-  }, [p?.pulsado]);
+  }, [p?.pulsado, suena]);
+  // «Ding» al revelar (menos en tarjetas, donde el fin de turno ya lleva bocina)
+  const claveRevelar = p?.fase === "revelar" && p.sub?.tipo !== "tarjetas" ? `${p.sub?.id}:${p.indice}` : null;
+  useEffect(() => {
+    if (suena && claveRevelar) sonidos.acierto();
+  }, [claveRevelar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!p) return <div className="tv"><div /><div className="tv-centro tv-sub">{conectado ? "Cargando…" : "Conectando…"}</div></div>;
 
@@ -25,6 +34,17 @@ export function Tv() {
         <div className="marca">🎉 {p.titulo}</div>
         <div className="unete">
           {location.host} · código <b>{p.codigo}</b> {!conectado && <span style={{ color: "var(--ko)" }}>· sin conexión</span>}
+          <button
+            className="btn peq"
+            style={{ marginLeft: "1vw", background: "transparent" }}
+            aria-label={mudo ? "Activar sonidos" : "Silenciar sonidos"}
+            onClick={() => {
+              guardado.poner("tv-mudo", mudo ? "0" : "1");
+              setMudo(!mudo);
+            }}
+          >
+            {mudo ? "🔇" : "🔊"}
+          </button>
         </div>
       </div>
       <div className="tv-centro">
@@ -209,8 +229,8 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
           <div className="revela">{euros(precio)}</div>
           <div className="fila" style={{ gap: "2vw", justifyContent: "center" }}>
             {ofertas.map(({ e, v }) => (
-              <div key={e.id} className="tv-eq" style={conColor(e.color)}>
-                <span>{e.nombre}&nbsp;</span>
+              <div key={e.id} className={`tv-eq ${p.ganadores?.includes(e.id) ? "on" : ""}`} style={conColor(e.color)}>
+                <span>{p.ganadores?.includes(e.id) ? "🏆 " : ""}{e.nombre}&nbsp;</span>
                 <span className="n">{v === undefined ? "—" : euros(v)}</span>
               </div>
             ))}
@@ -339,6 +359,14 @@ function CancionTv({ p }: { p: Publico }) {
         <Contador p={p} />
         <div className="tv-emoji">🎶</div>
         <div className="revela">{p.solucion?.texto}</div>
+        {p.ganadores?.length ? (
+          p.ganadores.map((id) => {
+            const g = equipoDe(p, id)!;
+            return <div key={id} className="pulsado" style={{ background: g.color, fontSize: "5vh" }}>✅ {g.nombre} +1</div>;
+          })
+        ) : (
+          <div className="tv-sub">Nadie la acertó</div>
+        )}
       </>
     );
   return (

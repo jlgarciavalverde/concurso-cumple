@@ -26,6 +26,10 @@ export type AccionHost =
   | { t: "reiniciar" }
   | { t: "codigo" }
   | { t: "vista"; v: Vista }
+  | { t: "continuar" }
+  | { t: "deCero" }
+  | { t: "siguientePrueba" }
+  | { t: "siguienteTurno" }
   | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez"; valor: number | boolean };
 
 export type AccionEquipo =
@@ -107,6 +111,20 @@ export class Juego {
     return this.buscar(this.estado.vivo.subId);
   }
 
+  /** Todas las subpruebas en orden. */
+  get subs(): Sub[] {
+    return this.contenido.pruebas.flatMap((p) => p.subs);
+  }
+
+  /** Deja la subprueba actual guardada y entra en otra (en su intro). */
+  private irA(subId: string | null) {
+    const e = this.estado;
+    const v = e.vivo;
+    if (v.subId && (v.fase !== "intro" || e.crudo[v.subId])) (e.guardados ??= {})[v.subId] = { ...v, fin: null, vista: "juego" };
+    e.vivo = vivoVacio();
+    e.vivo.subId = this.buscar(subId) ? subId : null;
+  }
+
   get puedeDeshacer() {
     return this.pila.length;
   }
@@ -129,6 +147,7 @@ export class Juego {
     v.respuestas = {};
     v.pulsado = null;
     v.bloqueados = [];
+    v.acertante = null;
     v.fin = null;
     if ((sub.tipo === "test" || sub.tipo === "precio") && sub.segundos > 0) v.fin = ahora + sub.segundos * 1000;
     if (sub.tipo === "adivinar") {
@@ -200,12 +219,23 @@ export class Juego {
     this.estado.vivo.tarjeta = libres.length ? libres[Math.floor(Math.random() * libres.length)] : -1;
   }
 
-  /** Cierra sola la pregunta si se acabó el tiempo. Devuelve true si cambió algo. */
+  /** Borra resultados y progreso de una subprueba y la deja en su intro. */
+  private limpiar(subId: string) {
+    const e = this.estado;
+    delete e.crudo[subId];
+    delete e.puntos[subId];
+    delete e.correcciones[subId];
+    delete e.tarjetasUsadas[subId];
+    delete e.guardados?.[subId];
+    e.vivo = { ...vivoVacio(), subId, vista: e.vivo.vista };
+  }
+
+  /** Cierra sola la pregunta (o el turno de tarjetas) si se acabó el tiempo. Devuelve true si cambió algo. */
   tic(): boolean {
     const v = this.estado.vivo;
     const a = this.actual;
     if (!a || v.fase !== "jugando" || v.fin === null || this.reloj() < v.fin) return false;
-    if (a.sub.tipo === "test" || a.sub.tipo === "precio" || a.sub.tipo === "adivinar") {
+    if (a.sub.tipo === "test" || a.sub.tipo === "precio" || a.sub.tipo === "adivinar" || a.sub.tipo === "tarjetas") {
       this.revelar(a.sub);
       return true;
     }
@@ -230,14 +260,26 @@ export class Juego {
       case "vista":
         if (["juego", "marcador", "podio"].includes(acc.v)) v.vista = acc.v;
         return;
-      case "ir": {
-        e.vivo = vivoVacio();
-        e.vivo.subId = this.buscar(acc.subId) ? acc.subId : null;
+      case "ir":
+        this.irA(acc.subId);
+        return;
+      case "siguientePrueba": {
+        const subs = this.subs;
+        const i = subs.findIndex((x) => x.id === v.subId);
+        this.irA(subs[i + 1]?.id ?? null);
         return;
       }
       case "reiniciar": {
         const codigo = e.codigo;
         this.estado = { ...estadoVacio(), codigo };
+        return;
+      }
+      case "continuar": {
+        const g = v.subId ? e.guardados?.[v.subId] : undefined;
+        if (!g) return;
+        // Se retoma sin cuenta atrás (se había parado al salir); el presentador revela cuando quiera
+        e.vivo = { ...g, fin: null, vista: v.vista };
+        delete e.guardados![v.subId!];
         return;
       }
       case "codigo":
@@ -254,7 +296,23 @@ export class Juego {
     if (!a) return;
     const { sub } = a;
     switch (acc.t) {
+      case "deCero":
+        this.limpiar(sub.id);
+        return;
+      case "siguienteTurno": {
+        if (sub.tipo !== "tarjetas" && sub.tipo !== "manual") return;
+        const ids = this.ids;
+        const jugados = Object.keys(e.crudo[sub.id] ?? {});
+        const desde = v.turno ? ids.indexOf(v.turno) + 1 : 0;
+        const orden = [...ids.slice(desde), ...ids.slice(0, desde)];
+        const sig = orden.find((id) => !jugados.includes(id)) ?? orden[0];
+        this.host({ t: "turno", equipo: sig });
+        this.pila.pop(); // la llamada interna no cuenta como otro paso de deshacer
+        return;
+      }
       case "empezar":
+        // Empezar desde el principio un test/precio/canción ya jugado lo reinicia (si no, sumaría dos veces)
+        if ((sub.tipo === "test" || sub.tipo === "precio" || sub.tipo === "cancion") && v.fase === "intro" && e.crudo[sub.id]) this.limpiar(sub.id);
         if (sub.tipo === "tarjetas") {
           if (!v.turno) return;
           v.fase = "jugando";
@@ -304,11 +362,7 @@ export class Juego {
         delete e.puntos[sub.id];
         return;
       case "limpiarSub":
-        delete e.crudo[sub.id];
-        delete e.puntos[sub.id];
-        delete e.correcciones[sub.id];
-        delete e.tarjetasUsadas[sub.id];
-        e.vivo = { ...vivoVacio(), subId: sub.id };
+        this.limpiar(sub.id);
         return;
       case "crudo": {
         if (!this.ids.includes(acc.equipo)) return;
@@ -330,6 +384,7 @@ export class Juego {
       case "acierto":
         if (sub.tipo === "cancion" && v.pulsado && v.fase === "jugando") {
           this.sumar(sub.id, v.pulsado, 1);
+          v.acertante = v.pulsado;
           v.fase = "revelar";
           v.sonando = true;
           return;
@@ -494,6 +549,8 @@ export class Juego {
         if (v.fase === "revelar") {
           base.solucion = { precio: p.precio };
           base.respuestasVisibles = Object.fromEntries(Object.entries(v.respuestas).map(([k, r]) => [k, r.valor]));
+          const ofertas = Object.fromEntries(this.ids.map((id) => [id, v.respuestas[id]?.valor as number | undefined]));
+          base.ganadores = Object.entries(puntosPrecio(ofertas, p.precio, sub.sinPasarse)).filter(([, n]) => n > 0).map(([k]) => k);
         }
       }
     } else if (sub.tipo === "adivinar") {
@@ -533,7 +590,10 @@ export class Juego {
       const c = sub.canciones[v.indice];
       if (c && v.fase !== "intro") {
         if (c.audio) base.audio = { src: c.audio, inicio: c.inicio };
-        if (v.fase === "revelar") base.solucion = { texto: `${c.titulo} — ${c.artista}` };
+        if (v.fase === "revelar") {
+          base.solucion = { texto: `${c.titulo} — ${c.artista}` };
+          base.ganadores = v.acertante ? [v.acertante] : [];
+        }
       }
     } else if (sub.tipo === "tarjetas") {
       base.sub.modo = sub.modo;

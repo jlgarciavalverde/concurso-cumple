@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
-import { conColor, Cuenta, equipoDe, FORMAS, posRosco, fmt } from "../components/comun.tsx";
+import { conColor, Cuenta, equipoDe, FORMAS, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function Jugar() {
@@ -75,9 +75,11 @@ export function Jugar() {
   const v = datos as VistaEquipo;
   return (
     <div className="movil">
+      {!conectado && <div className="banda-conexion">📡 Reconectando… no cerréis la página</div>}
+      <Avisos v={v} />
       <div className="movil-cab" style={{ background: yo.color }}>
         <span>{yo.nombre}</span>
-        <span>{fmt(yo.total)} pts {!conectado && "· ⚠️"}</span>
+        <span>{fmt(yo.total)} pts</span>
       </div>
       <div className="movil-cuerpo">
         <Cuerpo v={v} desfase={desfase} enviar={(a) => enviar("equipo", a)} />
@@ -108,19 +110,51 @@ function Espera({ emoji = "👀", texto }: { emoji?: string; texto: string }) {
   );
 }
 
+/** Pantalla encendida y vibración cuando hay que hacer algo (pregunta nueva, os toca…). */
+function Avisos({ v }: { v: VistaEquipo }) {
+  useWakeLock(true);
+  const abierta = v.fase === "jugando" ? `${v.sub?.id}:${v.indice}:${v.abiertaEn}` : null;
+  useEffect(() => {
+    if (abierta) navigator.vibrate?.(60);
+  }, [abierta]);
+  const meToca = v.turno === v.yo && v.sub ? `${v.sub.id}:${v.turno}` : null;
+  useEffect(() => {
+    if (meToca) navigator.vibrate?.([120, 60, 120]);
+  }, [meToca]);
+  return null;
+}
+
+/** «Vais 2º con 26,5 puntos». */
+function Posicion({ v }: { v: VistaEquipo }) {
+  const yo = equipoDe(v, v.yo);
+  if (!yo || v.equipos.every((e) => !e.total)) return null; // al principio no tiene gracia «vais 1º con 0»
+  const puesto = v.equipos.filter((e) => e.total > yo.total).length + 1;
+  return <div className="resultado-movil" style={{ background: "var(--panel2)" }}>Vais {puesto}º con {fmt(yo.total)} puntos</div>;
+}
+
 function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
   const s = v.sub;
-  if (!s || v.vista !== "juego") return <Espera texto="Mirad la pantalla" />;
+  if (v.vista === "podio") return <><Espera emoji="🏆" texto="¡Mirad el podio!" /><Posicion v={v} /></>;
+  if (v.vista === "marcador") return <><Espera emoji="📊" texto="Marcador en la pantalla" /><Posicion v={v} /></>;
+  if (!s) return <><Espera emoji="⏳" texto="Esperando a que empiece la siguiente prueba…" /><Posicion v={v} /></>;
   if (v.fase === "resultado") {
     const p = v.ranking?.[v.yo] ?? 0;
     return (
       <>
         <Espera emoji={p >= 10 ? "🏆" : p > 0 ? "👏" : "😅"} texto={s.titulo} />
-        <div className="resultado-movil bien">+{p} puntos al marcador</div>
+        <div className="resultado-movil bien">+{fmt(p)} puntos al marcador</div>
+        <Posicion v={v} />
       </>
     );
   }
-  if (v.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual") return <Espera emoji={s.emoji} texto={`${s.titulo} — ¡preparados!`} />;
+  if (v.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual")
+    return (
+      <>
+        <Espera emoji={s.emoji} texto={`${s.pruebaTitulo}: ${s.titulo}`} />
+        {s.descripcion && <div className="espera suave">{s.descripcion}</div>}
+        <div className="espera suave">¡Preparados! Empieza en nada…</div>
+      </>
+    );
 
   switch (s.tipo) {
     case "test":
@@ -134,7 +168,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
     case "tarjetas":
     case "manual": {
       const t = equipoDe(v, v.turno);
-      if (t?.id === v.yo) return <Espera emoji="🔥" texto={s.tipo === "tarjetas" ? "¡Os toca! El presentador tiene la tarjeta." : "¡Os toca!"} />;
+      if (t?.id === v.yo) return <Espera emoji="🔥" texto={s.tipo === "tarjetas" ? "¡Os toca! Quien explica, que mire la tarjeta." : "¡Os toca!"} />;
       return <Espera emoji={s.emoji} texto={t ? `Turno de ${t.nombre}` : s.descripcion ?? s.titulo} />;
     }
   }

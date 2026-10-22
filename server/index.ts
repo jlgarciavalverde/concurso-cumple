@@ -77,13 +77,18 @@ app.get("/api/admin/contenido", async () => juego.contenido);
 app.put("/api/admin/contenido", async (req, reply) => {
   const err = validarContenido(req.body);
   if (err) return reply.code(400).send({ error: err });
-  juego.contenido = req.body as Contenido;
+  const nuevo = req.body as Contenido;
+  const actual = juego.contenido.rev ?? 0;
+  if ((nuevo.rev ?? 0) !== actual)
+    return reply.code(409).send({ error: "El contenido ha cambiado desde que abriste esta página (p. ej. el presentador cambió algo en directo). Recarga y vuelve a hacer tus cambios." });
+  nuevo.rev = actual + 1;
+  juego.contenido = nuevo;
   escribir(fContenido, juego.contenido);
   emitir();
-  return { ok: true };
+  return { ok: true, rev: nuevo.rev };
 });
 app.post("/api/admin/restaurar", async () => {
-  juego.contenido = contenidoInicial();
+  juego.contenido = { ...contenidoInicial(), rev: (juego.contenido.rev ?? 0) + 1 };
   escribir(fContenido, juego.contenido);
   emitir();
   return juego.contenido;
@@ -184,7 +189,10 @@ io.on("connection", (socket) => {
       try {
         juego.host(acc);
         if (acc.t === "codigo") for (const id of [...juego.ids, "lobby"]) io.in(id === "lobby" ? id : `eq:${id}`).disconnectSockets(true);
-        if (acc.t === "config") escribir(fContenido, juego.contenido);
+        if (acc.t === "config") {
+          juego.contenido.rev = (juego.contenido.rev ?? 0) + 1;
+          escribir(fContenido, juego.contenido);
+        }
         guardar();
         emitir();
       } catch (e) {

@@ -63,7 +63,8 @@ export function Admin() {
   };
   const guardar = async () => {
     try {
-      await api(pin, "PUT", "/api/admin/contenido", c);
+      const r = await api<{ rev: number }>(pin, "PUT", "/api/admin/contenido", c);
+      setC({ ...c, rev: r.rev });
       setSucio(false);
       setMsg({ ok: true, t: "Guardado ✅" });
     } catch (e) {

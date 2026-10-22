@@ -57,6 +57,19 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(tv.locator(".tv-eq").filter({ hasText: "Rojo" })).toContainText("1,5");
   await expect(tv.locator(".tv-eq").filter({ hasText: "Azul" })).toContainText("1,25");
   await expect(host.getByText("Puntos automáticos, ya en el marcador")).toBeVisible();
+  // atajos: M enseña el marcador, J vuelve al juego
+  await host.keyboard.press("m");
+  await expect(tv.locator(".desglose")).toBeVisible();
+  await host.keyboard.press("j");
+  await expect(tv.locator(".tabla-res")).toBeVisible();
+  // volver a una prueba jugada ofrece continuar en lugar de sumar otra vez
+  await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
+  await host.locator(".host-nav").getByRole("button", { name: /Cultura general/ }).click();
+  await expect(host.getByText("Esta prueba ya se empezó.")).toBeVisible();
+  await foto(host, "host-retomar");
+  await host.keyboard.press(" ");
+  await expect(host.getByText("Puntos automáticos, ya en el marcador")).toBeVisible();
+  await expect(tv.locator(".tv-eq").filter({ hasText: "Rojo" })).toContainText("1,5");
 
   // --- Canción con pulsador
   await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
@@ -180,4 +193,10 @@ test("admin: PIN, edición y guardado", async ({ page }) => {
   await page.getByText("¿Cuánto cuesta?").click();
   await expect(page.locator('details[open] input[value="Cachimba Kaloud"]')).toHaveCount(1);
   await foto(page, "admin");
+
+  // Guardar sobre una versión vieja del contenido devuelve 409 (no machaca cambios hechos en directo)
+  const h = { "x-pin": "1234" };
+  const c = await (await page.request.get("/api/admin/contenido", { headers: h })).json();
+  expect((await page.request.put("/api/admin/contenido", { headers: h, data: c })).status()).toBe(200);
+  expect((await page.request.put("/api/admin/contenido", { headers: h, data: c })).status()).toBe(409);
 });

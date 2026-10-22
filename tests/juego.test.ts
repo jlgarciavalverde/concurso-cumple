@@ -245,3 +245,86 @@ describe("marcador en directo", () => {
     expect(totales(c, j.estado)).toEqual({ rojo: 0, azul: 0, verde: 10, amarillo: 0 });
   });
 });
+
+describe("flujo", () => {
+  it("volver a una prueba jugada: continuar no suma dos veces y «de cero» reinicia", () => {
+    const { j } = partida();
+    j.host({ t: "ir", subId: "c-rap" });
+    j.host({ t: "empezar" });
+    j.equipo("verde", { t: "pulsar" });
+    j.host({ t: "acierto" });
+    j.host({ t: "siguiente" });
+    j.host({ t: "ir", subId: "kahoot" });
+    j.host({ t: "ir", subId: "c-rap" });
+    expect(j.estado.vivo.fase).toBe("intro");
+    expect(j.estado.guardados?.["c-rap"]).toMatchObject({ indice: 1, fase: "jugando" });
+    j.host({ t: "continuar" });
+    expect(j.estado.vivo).toMatchObject({ subId: "c-rap", indice: 1, fase: "jugando" });
+    expect(j.estado.crudo["c-rap"]).toEqual({ verde: 1 });
+    // Pulsar «Empezar» desde la intro de una prueba ya jugada empieza limpia (antes sumaba dos veces)
+    j.host({ t: "ir", subId: "c-rap" });
+    j.host({ t: "empezar" });
+    expect(j.estado.crudo["c-rap"]).toBeUndefined();
+    j.host({ t: "ir", subId: "kahoot" });
+    j.host({ t: "ir", subId: "c-rap" });
+    j.host({ t: "deCero" });
+    expect(j.estado.guardados?.["c-rap"]).toBeUndefined();
+    expect(j.estado.vivo).toMatchObject({ subId: "c-rap", fase: "intro", indice: 0 });
+  });
+
+  it("siguiente prueba sigue el orden y al final vuelve al inicio", () => {
+    const { j, c } = partida();
+    const orden = c.pruebas.flatMap((p) => p.subs.map((s) => s.id));
+    j.host({ t: "siguientePrueba" });
+    expect(j.estado.vivo.subId).toBe(orden[0]);
+    j.host({ t: "siguientePrueba" });
+    expect(j.estado.vivo.subId).toBe(orden[1]);
+    j.host({ t: "ir", subId: orden.at(-1)! });
+    j.host({ t: "siguientePrueba" });
+    expect(j.estado.vivo.subId).toBeNull();
+  });
+
+  it("siguiente equipo salta a los que ya han jugado", () => {
+    const { j } = partida();
+    j.host({ t: "ir", subId: "prohibida" });
+    j.host({ t: "siguienteTurno" });
+    expect(j.estado.vivo.turno).toBe("rojo");
+    j.host({ t: "empezar" });
+    j.host({ t: "revelar" });
+    j.host({ t: "turno", equipo: "verde" });
+    j.host({ t: "empezar" });
+    j.host({ t: "siguienteTurno" });
+    expect(j.estado.vivo.turno).toBe("amarillo");
+    j.host({ t: "deshacer" });
+    expect(j.estado.vivo.turno).toBe("verde"); // un solo paso de deshacer
+  });
+
+  it("el turno de tarjetas se cierra solo al acabar el tiempo", () => {
+    const { j, avanza } = partida();
+    j.host({ t: "ir", subId: "dibujo" });
+    j.host({ t: "turno", equipo: "azul" });
+    j.host({ t: "empezar" });
+    avanza(61000);
+    expect(j.tic()).toBe(true);
+    expect(j.estado.vivo.fase).toBe("revelar");
+    expect(j.publico().tarjeta).toBeUndefined();
+  });
+
+  it("precio y canción dicen quién se lleva el punto", () => {
+    const { j, c } = partida();
+    const precio = c.pruebas[2].subs[0];
+    if (precio.tipo !== "precio") throw new Error();
+    precio.productos[0].precio = 10;
+    j.host({ t: "ir", subId: "precio" });
+    j.host({ t: "empezar" });
+    j.equipo("rojo", { t: "responder", valor: 8 });
+    j.equipo("azul", { t: "responder", valor: 11 });
+    j.host({ t: "revelar" });
+    expect(j.publico().ganadores).toEqual(["azul"]);
+    j.host({ t: "ir", subId: "c-2000" });
+    j.host({ t: "empezar" });
+    j.equipo("verde", { t: "pulsar" });
+    j.host({ t: "acierto" });
+    expect(j.publico().ganadores).toEqual(["verde"]);
+  });
+});

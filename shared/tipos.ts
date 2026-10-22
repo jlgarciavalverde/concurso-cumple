@@ -68,6 +68,7 @@ export interface Prueba {
 }
 
 export interface Contenido {
+  rev?: number; // sube en cada cambio: evita que /admin machaque cambios hechos en directo
   titulo: string;
   tabla: number[]; // 10/5/3/1
   equipos: Equipo[];
@@ -99,6 +100,7 @@ export interface Vivo {
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
   sonando: boolean;
+  acertante?: EquipoId | null; // canción: quién la acertó
   // tarjetas y manual
   turno: EquipoId | null;
   tarjeta: number; // índice global de tarjeta
@@ -128,6 +130,7 @@ export interface Estado {
   puntos: Record<string, Record<EquipoId, number>>; // por sub, fijados a mano (si no, se calculan en directo)
   ajustes: Ajuste[];
   tarjetasUsadas: Record<string, number[]>;
+  guardados?: Record<string, Vivo>; // cómo se dejó cada subprueba al salir de ella (para continuar)
 }
 
 // Lo que reciben TV y móviles (sin soluciones antes de tiempo)
@@ -163,6 +166,7 @@ export interface Publico {
   contestados: EquipoId[];
   respuestasVisibles?: Record<EquipoId, unknown>;
   bonus?: Record<EquipoId, number>; // plus por rapidez en la pregunta revelada
+  ganadores?: EquipoId[]; // quién se lleva el punto en la canción / producto revelado
   hojas?: Record<EquipoId, { entregada: boolean; contestadas: number; marcas: Marca[]; puntos: number[]; valores: string[] }>;
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];

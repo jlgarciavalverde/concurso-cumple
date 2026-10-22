@@ -211,3 +211,6 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .resultado-movil.medio { background: var(--oro); color: #241400; }
 .rosco .letra.medio { background: var(--oro); color: #241400; }
 .hoja.marca-medio { box-shadow: 0 0 0 4px var(--oro); }
+.banda-conexion { position: sticky; top: 0; z-index: 20; background: var(--ko); color: #fff; text-align: center; font-weight: 700; padding: 8px; border-radius: 10px; animation: latido 0.8s infinite alternate; }
+.atajos { font-size: 0.8em; }
+.atajos kbd { background: var(--panel2); border: 1px solid var(--borde); border-radius: 5px; padding: 1px 6px; font-family: inherit; }

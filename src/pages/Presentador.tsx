@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
@@ -39,6 +39,7 @@ export function Presentador() {
     if (error) salir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
+  useAtajos((acc) => enviar("host", acc));
   if (!ok) return pedir(error ?? undefined);
   if (!h) return <div className="movil"><div className="movil-cuerpo espera">{conectado ? "Cargando…" : "Conectando…"}</div></div>;
 
@@ -57,7 +58,7 @@ export function Presentador() {
             {pr.subs.map((s) => (
               <button key={s.id} className={s.id === subId ? "on" : ""} onClick={() => a({ t: "ir", subId: s.id })}>
                 <span>{s.titulo}</span>
-                <span>{e.puntos[s.id] ? "✅" : e.crudo[s.id] ? "⏳" : ""}</span>
+                <span>{estadoSub(h, s.id)}</span>
               </button>
             ))}
           </div>
@@ -82,6 +83,9 @@ export function Presentador() {
             ))}
             <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}>↩️ Deshacer</button>
           </div>
+          <div className="atajos suave">
+            Atajos: <kbd>Espacio</kbd> siguiente paso · <kbd>Z</kbd> deshacer · <kbd>J</kbd> juego · <kbd>M</kbd> marcador · <kbd>P</kbd> podio
+          </div>
         </div>
 
         {actual ? (
@@ -90,7 +94,8 @@ export function Presentador() {
           <div className="panel col">
             <h2>Inicio</h2>
             <p className="suave">La TV muestra el QR para que cada equipo entre con su móvil. Abre la TV en <b>{location.host}/tv</b> y pulsa «Activar pantalla y sonido».</p>
-            <p className="suave">Elige una prueba en el menú para empezar.</p>
+            <p className="suave">Elige una prueba en el menú o empieza por la primera.</p>
+            <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}>▶️ Ir a la primera prueba</button>
           </div>
         )}
 
@@ -115,15 +120,18 @@ function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titul
           <h2>{sub.titulo}</h2>
         </div>
         <div className="fila">
-          <span className="chip">Fase: <b>{fase}</b></span>
+          <span className="chip">{textoFase(h, sub)}</span>
           {p.sub && p.sub.total > 0 && sub.tipo !== "tarjetas" && sub.tipo !== "adivinar" && <span className="chip">{v.indice + 1}/{p.sub.total}</span>}
           {v.fin !== null && <Cuenta fin={v.fin} inicio={v.abiertaEn} desfase={desfase} tam="52px" />}
         </div>
       </div>
       {sub.descripcion && <div className="suave">{sub.descripcion}</div>}
+      {fase === "intro" && <Pendientes sub={sub} />}
 
       {fase === "resultado" ? (
         <Resultado h={h} sub={sub} a={a} />
+      ) : fase === "intro" && h.estado.guardados?.[sub.id] ? (
+        <Retomar h={h} sub={sub} a={a} />
       ) : (
         <>
           {sub.tipo === "test" && <ControlTest h={h} sub={sub} a={a} />}
@@ -143,8 +151,87 @@ function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titul
 }
 
 const Abrir = ({ a, texto = "▶️ Empezar" }: { a: A; texto?: string }) => (
-  <button className="btn prim grande" onClick={() => a({ t: "empezar" })}>{texto}</button>
+  <button className="btn prim grande" data-principal onClick={() => a({ t: "empezar" })}>{texto}</button>
 );
+
+/** ✅ terminada, ⏳ a medias, ▶️ la actual. */
+function estadoSub(h: VistaHost, id: string): string {
+  const e = h.estado;
+  const prog = e.vivo.subId === id ? e.vivo : e.guardados?.[id];
+  if (prog?.fase === "resultado" || e.puntos[id]) return "✅";
+  if (e.vivo.subId === id) return "▶️";
+  if (prog || e.crudo[id]) return "⏳";
+  return "";
+}
+
+function textoFase(h: VistaHost, sub: Sub): string {
+  const v = h.estado.vivo;
+  const n = h.contenido.equipos.length;
+  if (v.fase === "intro") return sub.tipo === "tarjetas" || sub.tipo === "manual" ? "⏸️ Preparado" : "⏸️ Presentación en la TV";
+  if (v.fase === "resultado") return "🏁 Resultados";
+  if (v.fase === "revelar") return sub.tipo === "tarjetas" ? "⏹️ Turno terminado" : "👁️ Corregido";
+  switch (sub.tipo) {
+    case "cancion":
+      return v.pulsado ? "🔔 Han pulsado: decide" : v.sonando ? "🎵 Sonando" : "⏸️ En pausa";
+    case "tarjetas":
+      return "🔥 Turno en marcha";
+    case "manual":
+      return "🎬 En juego";
+    case "adivinar":
+      if (!porItem(sub)) return `⏳ Entregadas ${Object.values(v.hojas).filter((x) => x.entregada).length}/${n}`;
+      return `⏳ Esperando respuestas (${h.publico.contestados.length}/${n})`;
+    default:
+      return `⏳ Esperando respuestas (${h.publico.contestados.length}/${n})`;
+  }
+}
+
+/** Aviso si la subprueba tiene campos ✏️ sin rellenar (saldrían tal cual en la TV). */
+function Pendientes({ sub }: { sub: Sub }) {
+  const n = (JSON.stringify(sub).match(/✏️/g) ?? []).length;
+  if (!n) return null;
+  return (
+    <div className="error">
+      ⚠️ Esta prueba tiene {n} campo{n > 1 ? "s" : ""} con ✏️ sin rellenar: saldrían así en la TV. <a href="/admin" style={{ color: "var(--oro)" }}>Rellenar en /admin</a>
+    </div>
+  );
+}
+
+/** Volver a una prueba ya empezada: continuar donde se dejó o empezar de cero (sin sumar dos veces). */
+function Retomar({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
+  const g = h.estado.guardados![sub.id];
+  const donde = g.fase === "resultado" ? "en los resultados" : sub.tipo === "tarjetas" || sub.tipo === "manual" ? "donde se dejó" : `en la ${g.indice + 1}ª (${g.fase === "revelar" ? "ya corregida" : "sin corregir"})`;
+  return (
+    <div className="panel col" style={{ background: "var(--bg2)" }}>
+      <b>Esta prueba ya se empezó.</b>
+      <div className="fila">
+        <button className="btn prim grande" data-principal onClick={() => a({ t: "continuar" })}>▶️ Continuar {donde}</button>
+        <button className="btn ko" onClick={() => confirm("¿Empezar de cero? Se borran los resultados de esta prueba.") && a({ t: "deCero" })}>🔄 Empezar de cero</button>
+      </div>
+    </div>
+  );
+}
+
+/** Atajos de teclado del presentador (portátil). Espacio/Enter pulsa el botón principal visible. */
+function useAtajos(a: A) {
+  const ref = useRef(a);
+  ref.current = a;
+  useEffect(() => {
+    const h = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || t?.closest("input, textarea, select, [contenteditable]")) return;
+      const k = ev.key.toLowerCase();
+      if (k === " " || k === "enter") {
+        ev.preventDefault(); // que no se pulse además el botón que tenga el foco
+        document.querySelector<HTMLButtonElement>("[data-principal]:not(:disabled)")?.click();
+      } else if (k === "z") ref.current({ t: "deshacer" });
+      else if (k === "j") ref.current({ t: "vista", v: "juego" });
+      else if (k === "m") ref.current({ t: "vista", v: "marcador" });
+      else if (k === "p") ref.current({ t: "vista", v: "podio" });
+    };
+    addEventListener("keydown", h);
+    return () => removeEventListener("keydown", h);
+  }, []);
+}
 
 function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "test" }>; a: A }) {
   const v = h.estado.vivo;
@@ -179,8 +266,8 @@ function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "t
       </div>
       <div className="suave">Han contestado: {Object.keys(v.respuestas).length}/{h.contenido.equipos.length}</div>
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Revelar</button>}
-        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.preguntas.length ? "➡️ Siguiente pregunta" : "🏁 Resultados"}</button>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Revelar</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.preguntas.length ? "➡️ Siguiente pregunta" : "🏁 Resultados"}</button>}
       </div>
     </>
   );
@@ -207,8 +294,9 @@ function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: 
         </tbody>
       </table>
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Revelar precio</button>}
-        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.productos.length ? "➡️ Siguiente producto" : "🏁 Resultados"}</button>}
+        {v.fase === "jugando" && Object.keys(v.respuestas).length >= h.contenido.equipos.length && <span className="chip" style={{ background: "var(--ok)", color: "#04210f" }}>✅ Todos han respondido</span>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Revelar precio</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.productos.length ? "➡️ Siguiente producto" : "🏁 Resultados"}</button>}
       </div>
     </>
   );
@@ -299,8 +387,8 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
         {tabla}
         {v.fase === "revelar" && <div className="suave">Corrige con ✗ · ½ · ✓ o pon los puntos que quieras.</div>}
         <div className="fila">
-          {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
-          {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
+          {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
+          {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
         </div>
       </>
     );
@@ -328,9 +416,9 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
         <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Corrige con ✗ · ½ · ✓ o pon los puntos que quieras. ⚫ = no respondió."}</div>
       </div>
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir ya</button>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir ya</button>}
         {v.fase === "revelar" && (
-          <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.items.length ? `➡️ Siguiente ${nombreItem}` : "🏁 Resultados"}</button>
+          <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.items.length ? `➡️ Siguiente ${nombreItem}` : "🏁 Resultados"}</button>
         )}
       </div>
       <details>
@@ -368,7 +456,7 @@ function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo:
       )}
       <div className="fila">
         {v.fase === "jugando" && !pulsado && <button className="btn oro" onClick={() => a({ t: "revelar" })}>👁️ Nadie la sabe: revelar</button>}
-        <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "➡️ Siguiente canción" : "🏁 Resultados"}</button>
+        <button className="btn prim grande" data-principal={v.fase === "revelar" ? "" : undefined} onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "➡️ Siguiente canción" : "🏁 Resultados"}</button>
       </div>
       <Crudos h={h} sub={sub} a={a} />
     </>
@@ -413,7 +501,12 @@ function ControlTarjetas({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
           </div>
         </>
       )}
-      {turno && v.fase === "revelar" && <div className="suave">Turno terminado: {h.estado.crudo[sub.id]?.[turno.id] ?? 0} aciertos. Elige el siguiente equipo.</div>}
+      {(!turno || v.fase === "revelar") && (
+        <div className="fila">
+          {turno && <span className="suave">Turno terminado: {h.estado.crudo[sub.id]?.[turno.id] ?? 0} aciertos.</span>}
+          <SiguienteEquipo h={h} sub={sub} a={a} />
+        </div>
+      )}
       <Crudos h={h} sub={sub} a={a} />
     </>
   );
@@ -426,6 +519,7 @@ function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub,
       <Segundos valor={sub.segundos ?? 0} etiqueta="Cuenta atrás en la TV" campo="segundos" a={a} jugando={v.fase === "jugando"} />
       {(sub.segundos ?? 0) > 0 && <Abrir a={a} texto={v.fase === "jugando" ? `🔄 Reiniciar cuenta atrás (${sub.segundos} s)` : `▶️ Empezar cuenta atrás (${sub.segundos} s)`} />}
       <div className="fila">
+        <SiguienteEquipo h={h} sub={sub} a={a} />
         <span className="suave">Turno (opcional):</span>
         <button className={`btn peq ${!v.turno ? "prim" : ""}`} onClick={() => a({ t: "turno", equipo: null })}>Todos</button>
         {h.contenido.equipos.map((e) => (
@@ -550,7 +644,30 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
         )}
       </div>
       <div className="suave">Los puntos suman al marcador solos. Si corriges un resultado, se recalculan (salvo que los fijes a mano).</div>
+      <div className="fila">
+        <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}>
+          {siguienteTitulo(h, sub.id) ? `➡️ Siguiente prueba: ${siguienteTitulo(h, sub.id)}` : "🏆 Fin: ir al inicio"}
+        </button>
+        <button className="btn" onClick={() => a({ t: "vista", v: "marcador" })}>📊 Enseñar marcador</button>
+      </div>
     </>
+  );
+}
+
+function siguienteTitulo(h: VistaHost, id: string): string | null {
+  const subs = h.contenido.pruebas.flatMap((p) => p.subs);
+  return subs[subs.findIndex((x) => x.id === id) + 1]?.titulo ?? null;
+}
+
+/** Elige solo el siguiente equipo que aún no ha jugado esta prueba. */
+function SiguienteEquipo({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
+  const jugados = Object.keys(h.estado.crudo[sub.id] ?? {});
+  const faltan = h.contenido.equipos.filter((e) => !jugados.includes(e.id) && e.id !== h.estado.vivo.turno);
+  if (!faltan.length) return <span className="chip">✅ Han jugado todos</span>;
+  return (
+    <button className="btn" onClick={() => a({ t: "siguienteTurno" })}>
+      ⏭️ Siguiente equipo ({faltan.map((e) => e.nombre).join(", ")})
+    </button>
   );
 }
 

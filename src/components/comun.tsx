@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import type { Publico } from "../../shared/tipos.ts";
 import { useTic } from "../socket.ts";
@@ -91,3 +92,55 @@ export function desbloquearAudio() {
 
 /** 1.5 → «1,5»; enteros sin decimales. */
 export const fmt = (n: number | undefined) => (n ?? 0).toLocaleString("es-ES", { maximumFractionDigits: 2 });
+
+/** Mantiene la pantalla encendida mientras `activo` (se vuelve a pedir al volver a la pestaña). */
+export function useWakeLock(activo: boolean) {
+  useEffect(() => {
+    if (!activo || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    const pedir = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen").then((l) => (lock = l)).catch(() => {});
+    };
+    pedir();
+    document.addEventListener("visibilitychange", pedir);
+    return () => {
+      document.removeEventListener("visibilitychange", pedir);
+      void lock?.release().catch(() => {});
+    };
+  }, [activo]);
+}
+
+export const sonidos = {
+  tic: () => pitido(1200, 0.05, "sine"),
+  bocina: () => {
+    pitido(220, 0.7, "sawtooth");
+    setTimeout(() => pitido(180, 0.6, "sawtooth"), 120);
+  },
+  acierto: () => {
+    pitido(880, 0.12, "sine");
+    setTimeout(() => pitido(1320, 0.25, "sine"), 110);
+  },
+  pulsador: () => pitido(660, 0.35),
+};
+
+/** Tic en los últimos 5 s y bocina al llegar a 0. */
+export function useSonidosCuenta(fin: number | null, desfase: number, activo: boolean) {
+  const prev = useRef<number | null>(null);
+  const des = useRef(desfase);
+  des.current = desfase; // el desfase cambia con cada mensaje: que no reinicie la cuenta
+  useEffect(() => {
+    prev.current = null;
+    if (fin === null || !activo) return;
+    const id = setInterval(() => {
+      const s = segundosRestantes(fin, des.current);
+      if (s === null || s === prev.current) return;
+      if (prev.current !== null) {
+        if (s === 0) sonidos.bocina();
+        else if (s <= 5) sonidos.tic();
+      }
+      prev.current = s;
+    }, 200);
+    return () => clearInterval(id);
+  }, [fin, activo]);
+}
