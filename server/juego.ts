@@ -1,6 +1,6 @@
 // Motor del concurso: estado + acciones del presentador y de los equipos. Sin E/S: el servidor persiste y emite.
 import { coincide, desglose, puntosPrecio, puntosPropuestos, puntosRapidez, totales } from "../shared/puntuacion.ts";
-import type { Contenido, Estado, EquipoId, Prueba, Publico, Sub, Vista, VistaEquipo, Vivo } from "../shared/tipos.ts";
+import { porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo } from "../shared/tipos.ts";
 
 export type AccionHost =
   | { t: "ir"; subId: string | null }
@@ -25,12 +25,14 @@ export type AccionHost =
   | { t: "deshacer" }
   | { t: "reiniciar" }
   | { t: "codigo" }
-  | { t: "vista"; v: Vista };
+  | { t: "vista"; v: Vista }
+  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv"; valor: number | boolean };
 
 export type AccionEquipo =
   | { t: "responder"; valor: number }
   | { t: "hoja"; i: number; valor: string }
   | { t: "entregar" }
+  | { t: "item"; valor: string }
   | { t: "pulsar" };
 
 export const vivoVacio = (): Vivo => ({
@@ -128,10 +130,17 @@ export class Juego {
     v.pulsado = null;
     v.bloqueados = [];
     v.fin = null;
-    if ((sub.tipo === "test" || sub.tipo === "precio" || sub.tipo === "adivinar") && sub.segundos > 0) v.fin = ahora + sub.segundos * 1000;
+    if ((sub.tipo === "test" || sub.tipo === "precio") && sub.segundos > 0) v.fin = ahora + sub.segundos * 1000;
     if (sub.tipo === "adivinar") {
-      v.hojas = {};
-      for (const id of this.ids) v.hojas[id] = { valores: sub.items.map(() => ""), entregada: false };
+      const pi = porItem(sub);
+      const seg = pi ? segundosItem(sub) : sub.segundos;
+      if (seg > 0) v.fin = ahora + seg * 1000;
+      // Por item, la hoja se rellena letra a letra: solo se crea al empezar
+      if (!pi || v.indice === 0) {
+        v.hojas = {};
+        for (const id of this.ids) v.hojas[id] = { valores: sub.items.map(() => ""), hechos: sub.items.map(() => false), entregada: false };
+        this.estado.correcciones[sub.id] = Object.fromEntries(this.ids.map((id) => [id, sub.items.map(() => false)]));
+      }
     }
     if (sub.tipo === "cancion") v.sonando = true;
   }
@@ -152,13 +161,16 @@ export class Juego {
       for (const eq of this.ids) ofertas[eq] = v.respuestas[eq]?.valor as number | undefined;
       if (prod) for (const [eq, n] of Object.entries(puntosPrecio(ofertas, prod.precio, sub.sinPasarse))) this.sumar(sub.id, eq, n);
     } else if (sub.tipo === "adivinar") {
-      const corr: Record<EquipoId, boolean[]> = {};
+      const corr = (this.estado.correcciones[sub.id] ??= {});
+      const pi = porItem(sub);
       for (const eq of this.ids) {
         const h = v.hojas[eq];
-        h && (h.entregada = true);
-        corr[eq] = sub.items.map((it, i) => coincide(h?.valores[i] ?? "", it.respuesta));
+        const fila = (corr[eq] ??= sub.items.map(() => false));
+        sub.items.forEach((it, i) => {
+          if (!pi || i === v.indice) fila[i] = coincide(h?.valores[i] ?? "", it.respuesta);
+        });
+        if (h && !pi) h.entregada = true;
       }
-      this.estado.correcciones[sub.id] = corr;
       this.recontar(sub.id);
     } else if (sub.tipo === "cancion") {
       v.pulsado = null;
@@ -257,7 +269,7 @@ export class Juego {
         this.revelar(sub);
         return;
       case "siguiente":
-        if (sub.tipo === "tarjetas" || sub.tipo === "manual" || sub.tipo === "adivinar") {
+        if (sub.tipo === "tarjetas" || sub.tipo === "manual" || (sub.tipo === "adivinar" && !porItem(sub))) {
           v.fase = "resultado";
           v.sonando = false;
           return;
@@ -356,6 +368,13 @@ export class Juego {
         }
         return;
       }
+      case "config": {
+        const n = Math.round(Number(acc.valor));
+        if (acc.campo === "segundosItem" && sub.tipo === "adivinar" && n >= 0 && n <= 600) sub.segundosItem = n;
+        if (acc.campo === "segundos" && "segundos" in sub && n >= 0 && n <= 600) sub.segundos = n;
+        if (acc.campo === "tarjetaEnTv" && sub.tipo === "tarjetas") sub.tarjetaEnTv = !!acc.valor;
+        return;
+      }
       case "mas":
         if (v.fin !== null) v.fin += acc.segundos * 1000;
         else if (v.fase === "jugando") v.fin = ahora + acc.segundos * 1000;
@@ -385,7 +404,16 @@ export class Juego {
       if (this.ids.every((id) => v.respuestas[id])) this.revelar(sub);
       return true;
     }
-    if (sub.tipo === "adivinar" && (acc.t === "hoja" || acc.t === "entregar") && aTiempo) {
+    if (sub.tipo === "adivinar" && acc.t === "item" && porItem(sub) && aTiempo) {
+      const h = v.hojas[eq];
+      const valor = String(acc.valor ?? "").trim().slice(0, 60);
+      if (!h || h.hechos[v.indice] || !valor) return false;
+      h.valores[v.indice] = valor;
+      h.hechos[v.indice] = true;
+      if (this.ids.every((id) => v.hojas[id]?.hechos[v.indice])) this.revelar(sub);
+      return true;
+    }
+    if (sub.tipo === "adivinar" && !porItem(sub) && (acc.t === "hoja" || acc.t === "entregar") && aTiempo) {
       const h = v.hojas[eq];
       if (!h || h.entregada) return false;
       if (acc.t === "entregar") {
@@ -461,19 +489,31 @@ export class Juego {
         }
       }
     } else if (sub.tipo === "adivinar") {
+      const pi = porItem(sub);
       base.sub.estilo = sub.estilo;
+      base.sub.porItem = pi;
       base.sub.opciones = sub.opciones;
       base.sub.items = sub.items.map((it) => ({ etiqueta: it.etiqueta, pregunta: it.pregunta }));
+      // Un item está corregido si ya se reveló (por item: los anteriores y el actual tras revelar)
+      const corregido = (i: number) => (pi ? v.fase !== "intro" && (i < v.indice || (i === v.indice && revelado)) : revelado);
       base.hojas = {};
       for (const eq of this.ids) {
         const h = v.hojas[eq];
+        const ok = e.correcciones[sub.id]?.[eq];
         base.hojas[eq] = {
           entregada: !!h?.entregada,
           contestadas: h ? h.valores.filter((x) => x.trim()).length : 0,
-          ...(revelado ? { aciertos: e.correcciones[sub.id]?.[eq], valores: h?.valores } : {}),
+          marcas: sub.items.map((_, i): Marca => (!corregido(i) ? null : !h?.valores[i]?.trim() ? "nada" : ok?.[i] ? "ok" : "ko")),
+          valores: sub.items.map((_, i) => (corregido(i) ? (h?.valores[i] ?? "") : "")),
         };
       }
-      if (revelado) base.solucion = { respuestas: sub.items.map((it) => it.respuesta.split("/")[0]) };
+      const sol = (r: string) => (r.includes("✏️") ? "(sin solución puesta)" : r.split("/")[0]);
+      base.solucion = { respuestas: sub.items.map((it, i) => (corregido(i) ? sol(it.respuesta) : "")) };
+      if (pi && v.fase !== "intro") {
+        const it = sub.items[v.indice];
+        if (it) base.pregunta = { texto: it.pregunta || it.etiqueta };
+        base.contestados = this.ids.filter((id) => v.hojas[id]?.hechos?.[v.indice]);
+      }
     } else if (sub.tipo === "cancion") {
       const c = sub.canciones[v.indice];
       if (c && v.fase !== "intro") {
@@ -484,6 +524,7 @@ export class Juego {
       base.sub.modo = sub.modo;
       const t = sub.tarjetas[v.tarjeta];
       if (t?.condicion && v.fase === "jugando") base.condicion = t.condicion;
+      if (t && v.fase === "jugando" && tarjetaEnTv(sub)) base.tarjeta = t;
     } else if (sub.tipo === "manual") {
       base.sub.medida = sub.medida;
       base.sub.cronometro = sub.cronometro;
@@ -494,6 +535,7 @@ export class Juego {
   vistaEquipo(pub: Publico, eq: EquipoId): VistaEquipo {
     const v = this.estado.vivo;
     const out: VistaEquipo = { ...pub, yo: eq };
+    delete out.tarjeta; // la tarjeta nunca va a los móviles: la verían los que adivinan
     if (v.respuestas[eq]) out.miRespuesta = v.respuestas[eq].valor;
     if (v.hojas[eq]) out.miHoja = v.hojas[eq];
     return out;

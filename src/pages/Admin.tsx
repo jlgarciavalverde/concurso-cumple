@@ -315,18 +315,28 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
         {sub.tipo === "adivinar" && (
           <>
             <div className="fila">
-              <Campo etiqueta="Límite de tiempo (s, 0 = sin límite)"><Numero v={sub.segundos} on={(segundos) => set({ segundos })} /></Campo>
-              <Campo etiqueta="Estilo en el móvil">
+              <Campo etiqueta="Cómo se juega">
+                <select className="campo" value={sub.modo ?? "porItem"} onChange={(e) => set({ modo: e.target.value as "porItem" })}>
+                  <option value="porItem">De uno en uno (cuenta atrás y ✅/❌ por cada uno)</option>
+                  <option value="hoja">Todo a la vez (hoja que se entrega)</option>
+                </select>
+              </Campo>
+              {(sub.modo ?? "porItem") === "porItem" ? (
+                <Campo etiqueta="Segundos por cada uno (0 = sin límite)"><Numero v={sub.segundosItem ?? 20} on={(segundosItem) => set({ segundosItem })} /></Campo>
+              ) : (
+                <Campo etiqueta="Límite de tiempo total (s, 0 = sin límite)"><Numero v={sub.segundos} on={(segundos) => set({ segundos })} /></Campo>
+              )}
+              <Campo etiqueta="Estilo">
                 <select className="campo" value={sub.estilo} onChange={(e) => set({ estilo: e.target.value as "lista" })}>
                   <option value="lista">Lista</option>
                   <option value="rosco">Rosco</option>
                 </select>
               </Campo>
             </div>
-            <Campo etiqueta="Sugerencias al escribir (separadas por comas)">
+            <Campo etiqueta="Botones de sabores en el móvil (separados por comas; se pueden combinar varios)">
               <textarea className="campo" rows={2} value={sub.opciones.join(", ")} onChange={(e) => set({ opciones: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} />
             </Campo>
-            <div className="suave">En la solución puedes poner varias válidas separadas por «/» (p. ej. «Love 66/Love»). Mayúsculas y tildes dan igual, y al corregir puedes cambiar cualquier respuesta a mano.</div>
+            <div className="suave">Mezclas: escribe la solución con «+» (p. ej. «Sandía + Menta»); vale en cualquier orden. Varias soluciones válidas: sepáralas con «/». La corrección perdona mayúsculas, tildes, artículos, plurales, b/v, c/z/s, h y erratas pequeñas; aun así puedes cambiar cualquier corrección a mano.</div>
             <Lista<ItemAdivinar>
               nombre="Item"
               items={sub.items}
@@ -389,8 +399,9 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
           <>
             <div className="fila">
               <Campo etiqueta="Segundos por turno"><Numero v={sub.segundos} on={(segundos) => set({ segundos })} /></Campo>
+              <label className="fila suave"><input type="checkbox" checked={sub.tarjetaEnTv ?? true} onChange={(e) => set({ tarjetaEnTv: e.target.checked })} /> Mostrar la tarjeta en la TV</label>
             </div>
-            <div className="suave">{sub.modo === "palabra" ? "La palabra y las prohibidas solo las ve el presentador (pásale el móvil a quien explica)." : "La palabra solo la ve el presentador; la condición sale en la TV."}</div>
+            <div className="suave">{(sub.tarjetaEnTv ?? true) ? "La tarjeta sale en grande en la TV (que solo la vea quien explica/dibuja) y en el móvil del presentador; nunca en los móviles de los equipos." : "La tarjeta solo sale en el móvil del presentador; en la TV solo la condición (dibujo)."}</div>
             <Lista<Tarjeta>
               nombre="Tarjeta"
               items={sub.tarjetas}

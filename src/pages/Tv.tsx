@@ -1,6 +1,6 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Publico } from "../../shared/tipos.ts";
+import type { Marca, Publico } from "../../shared/tipos.ts";
 import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, pitido, posRosco } from "../components/comun.tsx";
 import { useCanal } from "../socket.ts";
 
@@ -99,7 +99,7 @@ function Centro({ p, desfase }: { p: Publico; desfase: number }) {
     case "precio":
       return <Precio p={p} desfase={desfase} />;
     case "adivinar":
-      return s.estilo === "rosco" ? <Roscos p={p} desfase={desfase} /> : <Hojas p={p} desfase={desfase} />;
+      return <AdivinarTv p={p} desfase={desfase} />;
     case "cancion":
       return <CancionTv p={p} />;
     case "tarjetas":
@@ -218,7 +218,84 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
   );
 }
 
-function Hojas({ p, desfase }: { p: Publico; desfase: number }) {
+const MARCA: Record<NonNullable<Marca>, string> = { ok: "✅", ko: "❌", nada: "⚫" };
+
+function AdivinarTv({ p, desfase }: { p: Publico; desfase: number }) {
+  const s = p.sub!;
+  if (!s.porItem) return <HojasTv p={p} desfase={desfase} />;
+  const items = s.items ?? [];
+  const rev = p.fase === "revelar";
+  const it = items[p.indice];
+  const rosco = s.estilo === "rosco";
+  return (
+    <>
+      <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
+        <div className="tv-sub">{s.titulo} · {p.indice + 1}/{items.length}</div>
+        {!rev && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam="12vh" />}
+      </div>
+      {rosco ? (
+        <div className="tv-pregunta" style={{ fontSize: "5vh" }}>
+          <span className="letra-grande">{it?.etiqueta}</span> {p.pregunta?.texto}
+        </div>
+      ) : (
+        <div className="tv-titulo">{it?.etiqueta}</div>
+      )}
+      {rev && <div className="revela">{p.solucion?.respuestas?.[p.indice]}</div>}
+      {rosco ? (
+        <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
+          {p.equipos.map((e) => {
+            const h = p.hojas?.[e.id];
+            const m = h?.marcas[p.indice];
+            return (
+              <div key={e.id} className="col" style={{ alignItems: "center", gap: "1vh" }}>
+                <div className="rosco" style={{ "--d": "24vh" } as CSSProperties}>
+                  {items.map((x, i) => {
+                    const mi = h?.marcas[i];
+                    return (
+                      <div key={i} className={`letra ${mi ?? "pend"} ${i === p.indice ? "actual" : ""}`} style={{ ...posRosco(i, items.length), ...(mi ? {} : { background: e.color }) }}>
+                        {x.etiqueta}
+                      </div>
+                    );
+                  })}
+                  <div className="centro" style={{ color: e.color, fontSize: "2.6vh" }}>
+                    {e.nombre}
+                    <br />
+                    <span style={{ fontSize: "5vh" }}>{rev && m ? MARCA[m] : p.contestados.includes(e.id) ? "✍️" : "…"}</span>
+                  </div>
+                </div>
+                <div className="tv-sub" style={{ fontSize: "2.4vh", minHeight: "3vh" }}>{rev ? h?.valores[p.indice] || "sin responder" : `${h?.marcas.filter((x) => x === "ok").length ?? 0} aciertos`}</div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="hojas">
+          {p.equipos.map((e) => {
+            const h = p.hojas?.[e.id];
+            const m = h?.marcas[p.indice];
+            return (
+              <div key={e.id} className={`hoja ${rev && m ? `marca-${m}` : ""}`} style={conColor(e.color)}>
+                <div className="fila" style={{ justifyContent: "space-between" }}>
+                  <b>{e.nombre}</b>
+                  <span style={{ fontSize: "4.4vh" }}>{rev && m ? MARCA[m] : p.contestados.includes(e.id) ? "✍️" : "…"}</span>
+                </div>
+                <div style={{ fontSize: "3vh", minHeight: "4vh", fontWeight: 700 }}>{rev ? h?.valores[p.indice] || "sin responder" : p.contestados.includes(e.id) ? "¡Respondido!" : "Pensando…"}</div>
+                <div className="fila" style={{ gap: 4, marginTop: "1vh" }}>
+                  {items.map((_, i) => (
+                    <span key={i} className={`mini ${h?.marcas[i] ?? "pend"} ${i === p.indice ? "actual" : ""}`}>{h?.marcas[i] ? MARCA[h.marcas[i]!] : i + 1}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!rev && <Contestados p={p} />}
+    </>
+  );
+}
+
+function HojasTv({ p, desfase }: { p: Publico; desfase: number }) {
   const s = p.sub!;
   const rev = p.fase === "revelar";
   const items = s.items ?? [];
@@ -235,63 +312,18 @@ function Hojas({ p, desfase }: { p: Publico; desfase: number }) {
               {rev ? (
                 items.map((it, i) => (
                   <div key={i} className="l">
-                    <span>{it.etiqueta}: {h?.valores?.[i] || "—"}</span>
-                    <span>{h?.aciertos?.[i] ? "✅" : "❌"}</span>
+                    <span>{it.etiqueta}: {h?.valores[i] || "—"}</span>
+                    <span>{MARCA[h?.marcas[i] ?? "nada"]}</span>
                   </div>
                 ))
               ) : (
-                <div style={{ fontSize: "3.4vh", marginTop: "1vh" }}>
-                  {h?.entregada ? "✅ Entregado" : `${h?.contestadas ?? 0}/${items.length}`}
-                </div>
+                <div style={{ fontSize: "3.4vh", marginTop: "1vh" }}>{h?.entregada ? "✅ Entregado" : `${h?.contestadas ?? 0}/${items.length}`}</div>
               )}
             </div>
           );
         })}
       </div>
-      {rev && p.solucion?.respuestas && (
-        <div className="tv-sub">
-          Soluciones: {items.map((it, i) => `${it.etiqueta} ${p.solucion!.respuestas![i]}`).join(" · ")}
-        </div>
-      )}
-    </>
-  );
-}
-
-function Roscos({ p, desfase }: { p: Publico; desfase: number }) {
-  const s = p.sub!;
-  const items = s.items ?? [];
-  const rev = p.fase === "revelar";
-  const d = rev ? "28vh" : "26vh";
-  return (
-    <>
-      <div className="fila" style={{ gap: "3vw" }}>
-        <div className="tv-titulo" style={{ fontSize: "6vh" }}>{s.titulo}</div>
-        {!rev && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} />}
-      </div>
-      <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
-        {p.equipos.map((e) => {
-          const h = p.hojas?.[e.id];
-          return (
-            <div key={e.id} className="rosco" style={{ "--d": d } as CSSProperties}>
-              {items.map((it, i) => (
-                <div
-                  key={i}
-                  className={`letra ${rev ? (h?.aciertos?.[i] ? "ok" : "ko") : ""}`}
-                  style={{ ...posRosco(i, items.length), ...(rev ? {} : { background: e.color }) }}
-                >
-                  {it.etiqueta}
-                </div>
-              ))}
-              <div className="centro" style={{ color: e.color, fontSize: "3vh" }}>
-                {e.nombre}
-                <br />
-                {rev ? `${h?.aciertos?.filter(Boolean).length ?? 0} ✅` : h?.entregada ? "✅" : `${h?.contestadas ?? 0}/${items.length}`}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {rev && p.solucion?.respuestas && <div className="tv-sub">{items.map((it, i) => `${it.etiqueta}: ${p.solucion!.respuestas![i]}`).join(" · ")}</div>}
+      {rev && <div className="tv-sub">Soluciones: {items.map((it, i) => `${it.etiqueta} ${p.solucion?.respuestas?.[i] ?? ""}`).join(" · ")}</div>}
     </>
   );
 }
@@ -343,10 +375,23 @@ function TarjetasTv({ p, desfase }: { p: Publico; desfase: number }) {
         </>
       ) : (
         <>
-          <div className="pulsado" style={{ background: e.color, fontSize: "8vh" }}>Turno: {e.nombre}</div>
-          {p.fase === "jugando" && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam="18vh" />}
-          {p.condicion && <div className="tarjeta-cond">{p.condicion}</div>}
-          <div className="revela">{p.crudo[e.id] ?? 0} aciertos</div>
+          <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
+            <div className="pulsado" style={{ background: e.color, fontSize: p.tarjeta ? "4.5vh" : "8vh", padding: "1.5vh 3vw" }}>Turno: {e.nombre}</div>
+            {p.fase === "jugando" && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam={p.tarjeta ? "12vh" : "18vh"} />}
+            <div className="revela" style={{ fontSize: p.tarjeta ? "4vh" : undefined }}>{p.crudo[e.id] ?? 0} aciertos</div>
+          </div>
+          {p.tarjeta ? (
+            <div className="tarjeta-tv">
+              <div className="aviso">🙈 Solo mira quien {s.modo === "dibujo" ? "dibuja" : "explica"}</div>
+              <div className="pal">{p.tarjeta.palabra}</div>
+              {p.tarjeta.condicion && <div className="cond">{p.tarjeta.condicion}</div>}
+              {p.tarjeta.prohibidas && p.tarjeta.prohibidas.filter(Boolean).length > 0 && (
+                <div className="proh">{p.tarjeta.prohibidas.filter(Boolean).map((x) => <span key={x}>🚫 {x}</span>)}</div>
+              )}
+            </div>
+          ) : (
+            p.condicion && <div className="tarjeta-cond">{p.condicion}</div>
+          )}
         </>
       )}
     </>

@@ -71,21 +71,51 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByRole("button", { name: "✅ Acierto" }).click();
   await expect(tv.locator(".revela")).toContainText("Mazas y catapultas");
 
-  // --- Rosco
+  // --- Rosco letra a letra
   await host.locator(".host-nav").getByRole("button", { name: "Rosco cachimbero" }).click();
-  await host.getByRole("button", { name: /Empezar/ }).click();
-  await amarillo.getByPlaceholder("Respuesta").fill("cazoleta");
-  await amarillo.getByRole("button", { name: /Pasapalabra/ }).click();
-  await amarillo.getByPlaceholder("Respuesta").fill("aluminio");
-  await foto(amarillo, "movil-rosco");
+  await host.getByRole("button", { name: "15", exact: true }).click();
+  await expect(host.getByText("15 s", { exact: true })).toBeVisible();
+  await host.getByRole("button", { name: /Primera letra/ }).click();
+  await expect(tv.locator(".tv-pregunta")).toContainText("pieza donde se coloca el tabaco");
+  await rojo.getByPlaceholder("Respuesta").fill("la cazoleta");
+  await rojo.getByRole("button", { name: "Responder" }).click();
+  await expect(rojo.getByText("Enviado")).toBeVisible();
+  await azul.getByPlaceholder("Respuesta").fill("cachimba");
+  await azul.getByRole("button", { name: "Responder" }).click();
+  await verde.getByPlaceholder("Respuesta").fill("KAZOLETA");
+  await verde.getByRole("button", { name: "Responder" }).click();
+  await foto(rojo, "movil-rosco");
   await foto(tv, "tv-rosco");
-  amarillo.once("dialog", (d) => d.accept());
-  await amarillo.getByRole("button", { name: "Entregar" }).click();
-  await expect(amarillo.getByText("Entregado")).toBeVisible();
-  await host.getByRole("button", { name: /Cerrar y corregir/ }).click();
-  await expect(amarillo.getByText("2/8 aciertos")).toBeVisible();
+  // amarillo no responde: el presentador cierra
+  await host.getByRole("button", { name: /Cerrar y corregir ya/ }).click();
+  await expect(rojo.getByText("¡Correcto!")).toBeVisible();
+  await expect(azul.getByText("Fallo")).toBeVisible();
+  await expect(amarillo.getByText("Sin responder")).toBeVisible();
+  await expect(tv.locator(".revela")).toHaveText("Cazoleta");
   await foto(tv, "tv-rosco-revelar");
+  await foto(amarillo, "movil-rosco-nada");
+  await host.getByRole("button", { name: /Siguiente letra/ }).click();
+  await expect(tv.locator(".tv-pregunta")).toContainText("papel metálico");
+  await expect(tv.locator(".cuenta")).toContainText(/1[0-5]/);
+  for (const m of [rojo, azul, verde, amarillo]) {
+    await m.getByPlaceholder("Respuesta").fill("aluminio");
+    await m.getByRole("button", { name: "Responder" }).click();
+  }
+  // todos respondieron: se corrige solo
+  await expect(verde.getByText("¡Correcto!")).toBeVisible();
   await foto(host, "host-rosco");
+
+  // --- Olores: botones de sabores combinables
+  await host.locator(".host-nav").getByRole("button", { name: "Identifica las mezclas por el olor" }).click();
+  await host.getByRole("button", { name: /Primera mezcla/ }).click();
+  await rojo.getByRole("button", { name: "Sandía", exact: true }).click();
+  await rojo.getByRole("button", { name: "Menta", exact: true }).click();
+  await expect(rojo.getByPlaceholder(/Toca los sabores/)).toHaveValue("Sandía + Menta");
+  await foto(rojo, "movil-olores");
+  await rojo.getByRole("button", { name: "Responder" }).click();
+  await foto(tv, "tv-olores");
+  await host.getByRole("button", { name: /Cerrar y corregir ya/ }).click();
+  await foto(tv, "tv-olores-revelar");
 
   // --- Palabra prohibida: la tarjeta solo en el presentador
   await host.locator(".host-nav").getByRole("button", { name: "Palabra prohibida" }).click();
@@ -93,7 +123,11 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByRole("button", { name: /Empezar turno/ }).click();
   await expect(host.locator(".tarjeta-host")).toBeVisible();
   const palabra = await host.locator(".tarjeta-host .pal").innerText();
-  await expect(tv.getByText(palabra, { exact: true })).toHaveCount(0);
+  await expect(tv.locator(".tarjeta-tv .pal")).toHaveText(palabra); // en la TV, para quien explica
+  await expect(rojo.getByText(palabra, { exact: true })).toHaveCount(0); // nunca en los móviles
+  await host.getByText("Mostrar la tarjeta en la TV").click();
+  await expect(tv.locator(".tarjeta-tv")).toHaveCount(0);
+  await host.getByText("Mostrar la tarjeta en la TV").click();
   await host.getByRole("button", { name: "✅ Acierto" }).click();
   await expect(tv.locator(".revela")).toContainText("1 aciertos");
   await foto(host, "host-tarjeta");

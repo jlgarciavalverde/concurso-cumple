@@ -128,7 +128,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
     case "precio":
       return <PrecioMovil v={v} desfase={desfase} enviar={enviar} />;
     case "adivinar":
-      return <HojaMovil v={v} desfase={desfase} enviar={enviar} />;
+      return s.porItem ? <ItemMovil v={v} desfase={desfase} enviar={enviar} /> : <HojaMovil v={v} desfase={desfase} enviar={enviar} />;
     case "cancion":
       return <Pulsador v={v} enviar={enviar} />;
     case "tarjetas":
@@ -207,6 +207,78 @@ function PrecioMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; 
   );
 }
 
+const MARCA_TXT = { ok: "✅ ¡Correcto!", ko: "❌ Fallo", nada: "⚫ Sin responder" } as const;
+
+/** Rosco / olores / sabor de uno en uno: una respuesta por item, se corrige al acabar el tiempo o al responder todos. */
+function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
+  const s = v.sub!;
+  const items = s.items ?? [];
+  const it = items[v.indice];
+  const hoja = v.miHoja;
+  const marcas = v.hojas?.[v.yo]?.marcas ?? [];
+  const [txt, setTxt] = useState("");
+  useEffect(() => setTxt(""), [v.indice, s.id]);
+  const rosco = s.estilo === "rosco";
+  const opciones = s.opciones ?? [];
+  const elegidas = txt.split("+").map((x) => x.trim()).filter(Boolean);
+  const alternar = (o: string) => setTxt((elegidas.includes(o) ? elegidas.filter((x) => x !== o) : [...elegidas, o]).join(" + "));
+  const enviada = hoja?.hechos?.[v.indice];
+  const m = marcas[v.indice];
+
+  return (
+    <>
+      <div className="fila" style={{ justifyContent: "space-between" }}>
+        <b>{s.titulo} · {v.indice + 1}/{items.length}</b>
+        {v.fase === "jugando" && <Cuenta fin={v.fin} inicio={v.abiertaEn} desfase={desfase} tam="56px" />}
+      </div>
+      {rosco ? (
+        <div className="rosco" style={{ "--d": "min(56vw, 230px)", margin: "0 auto" } as CSSProperties}>
+          {items.map((x, i) => (
+            <div key={i} className={`letra ${marcas[i] ?? "pend"} ${i === v.indice ? "actual" : ""}`} style={posRosco(i, items.length)}>{x.etiqueta}</div>
+          ))}
+          <div className="centro" style={{ fontSize: "0.95em" }}>{marcas.filter((x) => x === "ok").length} ✅</div>
+        </div>
+      ) : (
+        <div className="fila" style={{ justifyContent: "center", gap: 6 }}>
+          {items.map((_, i) => (
+            <span key={i} className={`mini-m ${marcas[i] ?? "pend"} ${i === v.indice ? "actual" : ""}`}>{marcas[i] ? MARCA_TXT[marcas[i]!].slice(0, 2) : i + 1}</span>
+          ))}
+        </div>
+      )}
+      <div className="panel col">
+        <b style={{ fontSize: rosco ? "1.1em" : "1.6em", textAlign: rosco ? "left" : "center" }}>{rosco ? `${it?.etiqueta} · ${it?.pregunta ?? ""}` : it?.etiqueta}</b>
+        {v.fase === "revelar" ? (
+          <>
+            <div className={`resultado-movil ${m === "ok" ? "bien" : m === "ko" ? "mal" : "nada"}`}>{m ? MARCA_TXT[m] : "…"}</div>
+            <div className="suave">Solución: <b style={{ color: "var(--texto)" }}>{v.solucion?.respuestas?.[v.indice]}</b></div>
+            {hoja?.valores[v.indice] && <div className="suave">Vosotros: {hoja.valores[v.indice]}</div>}
+          </>
+        ) : enviada ? (
+          <Espera emoji="✍️" texto={`Enviado: «${hoja?.valores[v.indice]}». ¡A esperar!`} />
+        ) : (
+          <form
+            className="col"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (txt.trim()) enviar({ t: "item", valor: txt.trim() });
+            }}
+          >
+            {opciones.length > 0 && (
+              <div className="chips">
+                {opciones.map((o) => (
+                  <button type="button" key={o} className={`chip-op ${elegidas.includes(o) ? "on" : ""}`} onClick={() => alternar(o)}>{o}</button>
+                ))}
+              </div>
+            )}
+            <input className="campo" style={{ fontSize: "1.2em" }} autoComplete="off" autoCapitalize="sentences" placeholder={opciones.length ? "Toca los sabores o escribe" : "Respuesta"} value={txt} onChange={(e) => setTxt(e.target.value)} />
+            <button className="btn prim grande" disabled={!txt.trim()}>Responder</button>
+          </form>
+        )}
+      </div>
+    </>
+  );
+}
+
 function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
   const s = v.sub!;
   const items = s.items ?? [];
@@ -222,7 +294,7 @@ function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
   }, [clave]);
 
   if (v.fase === "revelar") {
-    const ac = v.hojas?.[v.yo]?.aciertos ?? [];
+    const ac = (v.hojas?.[v.yo]?.marcas ?? []).map((x) => x === "ok");
     return (
       <>
         <div className="resultado-movil bien">{ac.filter(Boolean).length}/{items.length} aciertos</div>

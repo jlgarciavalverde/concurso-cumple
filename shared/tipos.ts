@@ -37,7 +37,8 @@ export interface Cancion {
 export interface Tarjeta {
   palabra: string;
   prohibidas?: string[];
-  condicion?: string; // dibujo imposible: se ve en la TV
+  condicion?: string;
+  tarjeta?: Tarjeta; // solo TV y presentador, nunca a los móviles // dibujo imposible: se ve en la TV
 }
 
 interface SubBase {
@@ -48,10 +49,11 @@ interface SubBase {
 
 export type Sub =
   | (SubBase & { tipo: "test"; puntuacion: "ranking" | "aciertos"; rapidez: boolean; segundos: number; preguntas: PreguntaTest[] })
-  | (SubBase & { tipo: "adivinar"; estilo: "lista" | "rosco"; opciones: string[]; segundos: number; items: ItemAdivinar[] })
+  // modo «porItem» (por defecto): una letra/mezcla cada vez con su cuenta atrás; «hoja»: todo a la vez
+  | (SubBase & { tipo: "adivinar"; estilo: "lista" | "rosco"; modo?: "porItem" | "hoja"; segundosItem?: number; opciones: string[]; segundos: number; items: ItemAdivinar[] })
   | (SubBase & { tipo: "precio"; sinPasarse: boolean; segundos: number; productos: Producto[] })
   | (SubBase & { tipo: "cancion"; canciones: Cancion[] })
-  | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; segundos: number; tarjetas: Tarjeta[] })
+  | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; tarjetaEnTv?: boolean; segundos: number; tarjetas: Tarjeta[] })
   | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean });
 
 export type TipoSub = Sub["tipo"];
@@ -91,7 +93,7 @@ export interface Vivo {
   fin: number | null; // epoch ms de cierre (temporizador)
   respuestas: Record<EquipoId, Respuesta>;
   // adivinar (olores/sabor/rosco): respuestas por item y si están entregadas
-  hojas: Record<EquipoId, { valores: string[]; entregada: boolean }>;
+  hojas: Record<EquipoId, Hoja>;
   // pulsador (canciones)
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
@@ -101,6 +103,15 @@ export interface Vivo {
   tarjeta: number; // índice global de tarjeta
   cronometro: { desde: number | null; acumulado: number };
 }
+
+export interface Hoja {
+  valores: string[];
+  hechos: boolean[]; // porItem: ya ha respondido ese item
+  entregada: boolean;
+}
+
+/** Resultado de un item para un equipo: acierto, fallo, sin responder o aún sin corregir. */
+export type Marca = "ok" | "ko" | "nada" | null;
 
 export interface Ajuste {
   equipo: EquipoId;
@@ -135,6 +146,7 @@ export interface Publico {
     total: number; // nº de preguntas/canciones/…
     puntuacion?: "ranking" | "aciertos";
     estilo?: "lista" | "rosco";
+    porItem?: boolean;
     modo?: "palabra" | "dibujo";
     medida?: string;
     cronometro?: boolean;
@@ -149,13 +161,14 @@ export interface Publico {
   solucion?: { correcta?: number; texto?: string; precio?: number; respuestas?: string[] };
   contestados: EquipoId[];
   respuestasVisibles?: Record<EquipoId, unknown>;
-  hojas?: Record<EquipoId, { entregada: boolean; contestadas: number; aciertos?: boolean[]; valores?: string[] }>;
+  hojas?: Record<EquipoId, { entregada: boolean; contestadas: number; marcas: Marca[]; valores: string[] }>;
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
   sonando: boolean;
   audio?: { src: string; inicio: number };
   turno: EquipoId | null;
   condicion?: string;
+  tarjeta?: Tarjeta; // solo TV y presentador, nunca a los móviles
   cronometro: { desde: number | null; acumulado: number };
   crudo: Record<EquipoId, number>;
   ranking?: Record<EquipoId, number>; // puntos que se darían / se dieron
@@ -166,7 +179,7 @@ export interface Publico {
 export interface VistaEquipo extends Publico {
   yo: EquipoId;
   miRespuesta?: unknown;
-  miHoja?: { valores: string[]; entregada: boolean };
+  miHoja?: Hoja;
 }
 
 export interface VistaHost {
@@ -178,3 +191,8 @@ export interface VistaHost {
   tv: number;
   deshacer: number;
 }
+
+// Valores por defecto de campos añadidos después (el contenido guardado puede no tenerlos)
+export const porItem = (s: Extract<Sub, { tipo: "adivinar" }>) => (s.modo ?? "porItem") === "porItem";
+export const segundosItem = (s: Extract<Sub, { tipo: "adivinar" }>) => s.segundosItem ?? 20;
+export const tarjetaEnTv = (s: Extract<Sub, { tipo: "tarjetas" }>) => s.tarjetaEnTv ?? true;

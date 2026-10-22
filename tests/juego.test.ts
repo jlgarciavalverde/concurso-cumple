@@ -102,19 +102,66 @@ describe("Juego", () => {
     expect(j.estado.vivo).toMatchObject({ indice: 1, fase: "jugando", pulsado: null, bloqueados: [] });
   });
 
-  it("rosco: corrige solo y el presentador puede enmendar", () => {
-    const { j } = partida();
+  it("rosco por letra: cuenta atrás por letra, cierra al responder todos y marca ✔️/❌/sin responder", () => {
+    const { j, c, avanza } = partida();
     j.host({ t: "ir", subId: "rosco" });
+    j.host({ t: "config", campo: "segundosItem", valor: 15 });
+    const rosco = c.pruebas[1].subs[2];
+    expect(rosco.tipo === "adivinar" && rosco.segundosItem).toBe(15);
     j.host({ t: "empezar" });
-    j.equipo("azul", { t: "hoja", i: 0, valor: "cazoleta" });
-    j.equipo("azul", { t: "hoja", i: 3, valor: "jukah" });
-    j.equipo("azul", { t: "entregar" });
-    expect(j.equipo("azul", { t: "hoja", i: 1, valor: "aluminio" })).toBe(false);
-    expect(j.publico().hojas?.azul).toEqual({ entregada: true, contestadas: 2 });
-    j.host({ t: "revelar" });
-    expect(j.estado.crudo.rosco.azul).toBe(1);
-    j.host({ t: "correccion", equipo: "azul", item: 3, ok: true });
+    expect(j.estado.vivo.fin! - j.estado.vivo.abiertaEn).toBe(15000);
+    expect(j.publico().pregunta?.texto).toContain("Empieza por C");
+    expect(j.publico().solucion?.respuestas?.[0]).toBe(""); // sin chivatazos
+    j.equipo("rojo", { t: "item", valor: "cazoleta" });
+    expect(j.equipo("rojo", { t: "item", valor: "otra" })).toBe(false); // una sola respuesta
+    j.equipo("azul", { t: "item", valor: "cachimba" });
+    j.equipo("verde", { t: "item", valor: "kazoleta" });
+    expect(j.publico().contestados).toEqual(["rojo", "azul", "verde"]);
+    expect(j.publico().hojas?.rojo.valores[0]).toBe(""); // no se ven respuestas ajenas antes de corregir
+    avanza(16000);
+    expect(j.tic()).toBe(true); // amarillo no contesta: se cierra por tiempo
+    const p = j.publico();
+    expect(p.hojas?.rojo.marcas[0]).toBe("ok");
+    expect(p.hojas?.azul.marcas[0]).toBe("ko");
+    expect(p.hojas?.verde.marcas[0]).toBe("ok");
+    expect(p.hojas?.amarillo.marcas[0]).toBe("nada");
+    expect(p.hojas?.rojo.marcas[1]).toBe(null);
+    expect(p.solucion?.respuestas?.[0]).toBe("Cazoleta");
+    j.host({ t: "siguiente" });
+    expect(j.estado.vivo).toMatchObject({ indice: 1, fase: "jugando" });
+    for (const eq of ["rojo", "azul", "verde", "amarillo"]) j.equipo(eq, { t: "item", valor: eq === "azul" ? "papel albal" : "nada" });
+    expect(j.estado.vivo.fase).toBe("revelar"); // todos respondieron antes de tiempo
+    expect(j.estado.crudo.rosco).toEqual({ rojo: 1, azul: 1, verde: 1, amarillo: 0 });
+    j.host({ t: "correccion", equipo: "azul", item: 0, ok: true });
     expect(j.estado.crudo.rosco.azul).toBe(2);
+  });
+
+  it("modo hoja: todo a la vez y se entrega", () => {
+    const { j, c } = partida();
+    const olores = c.pruebas[1].subs[0];
+    if (olores.tipo !== "adivinar") throw new Error();
+    olores.modo = "hoja";
+    olores.items[0].respuesta = "Sandía + Menta";
+    j.host({ t: "ir", subId: "olores" });
+    j.host({ t: "empezar" });
+    j.equipo("azul", { t: "hoja", i: 0, valor: "menta y sandia" });
+    j.equipo("azul", { t: "entregar" });
+    expect(j.equipo("azul", { t: "hoja", i: 1, valor: "x" })).toBe(false);
+    j.host({ t: "revelar" });
+    expect(j.estado.crudo.olores.azul).toBe(1);
+    expect(j.publico().hojas?.azul.marcas.slice(0, 2)).toEqual(["ok", "nada"]);
+  });
+
+  it("tarjeta en la TV pero nunca en los móviles", () => {
+    const { j } = partida();
+    j.host({ t: "ir", subId: "dibujo" });
+    j.host({ t: "turno", equipo: "verde" });
+    j.host({ t: "empezar" });
+    const pub = j.publico();
+    expect(pub.tarjeta?.palabra).toBeTruthy();
+    expect(j.vistaEquipo(pub, "verde").tarjeta).toBeUndefined();
+    j.host({ t: "config", campo: "tarjetaEnTv", valor: false });
+    expect(j.publico().tarjeta).toBeUndefined();
   });
 
   it("tarjetas: turno, aciertos y sin repetir tarjeta", () => {

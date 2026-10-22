@@ -168,6 +168,7 @@ io.on("connection", (socket) => {
       try {
         juego.host(acc);
         if (acc.t === "codigo") for (const id of [...juego.ids, "lobby"]) io.in(id === "lobby" ? id : `eq:${id}`).disconnectSockets(true);
+        if (acc.t === "config") escribir(fContenido, juego.contenido);
         guardar();
         emitir();
       } catch (e) {

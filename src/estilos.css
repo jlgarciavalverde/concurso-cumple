@@ -121,6 +121,20 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .rosco { position: relative; width: var(--d); height: var(--d); }
 .rosco .letra { position: absolute; width: calc(var(--d) * 0.16); height: calc(var(--d) * 0.16); margin: calc(var(--d) * -0.08); border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--k1); color: #fff; font-size: calc(var(--d) * 0.08); border: 2px solid #ffffff55; }
 .rosco .letra.ok { background: var(--ok); }
+.rosco .letra.nada { background: #0b0b0f; border-color: #666; color: #aaa; }
+.rosco .letra.pend:not(.actual) { opacity: 0.45; }
+.letra-grande { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--k1); margin-right: 0.4em; }
+.hoja.marca-ok { box-shadow: 0 0 0 4px var(--ok); }
+.hoja.marca-ko { box-shadow: 0 0 0 4px var(--ko); }
+.hoja.marca-nada { opacity: 0.7; }
+.mini { display: inline-grid; place-items: center; min-width: 3.4vh; height: 3.4vh; border-radius: 8px; background: var(--panel2); font-size: 1.8vh; }
+.mini.actual { outline: 2px solid #fff; }
+.mini.pend { opacity: 0.5; }
+.tarjeta-tv { background: #fff; color: #1a1033; border-radius: 24px; padding: 2.5vh 4vw; text-align: center; min-width: 50vw; }
+.tarjeta-tv .aviso { font-size: 2.4vh; color: #7a6aa8; font-weight: 600; }
+.tarjeta-tv .pal { font-size: 10vh; font-weight: 800; line-height: 1.1; }
+.tarjeta-tv .cond { font-size: 4vh; font-weight: 800; color: #b07800; margin-top: 1vh; }
+.tarjeta-tv .proh { display: flex; flex-wrap: wrap; justify-content: center; gap: 1vh 2.5vw; margin-top: 1.5vh; font-size: 4.2vh; font-weight: 700; color: #c0123c; }
 .rosco .letra.ko { background: var(--ko); }
 .rosco .letra.hecha { background: var(--oro); color: #241400; }
 .rosco .letra.actual { box-shadow: 0 0 0 4px #fff; }
@@ -186,3 +200,11 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
   .host-nav .prueba { display: none; }
   .host-nav button { white-space: nowrap; flex: none; background: var(--panel); }
 }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; max-height: 38vh; overflow-y: auto; }
+.chip-op { border: 1px solid var(--borde); background: var(--bg2); border-radius: 999px; padding: 8px 14px; font-weight: 600; touch-action: manipulation; }
+.chip-op.on { background: var(--acento); border-color: transparent; color: #fff; }
+.mini-m { display: inline-grid; place-items: center; min-width: 34px; height: 34px; border-radius: 10px; background: var(--panel2); font-weight: 700; }
+.mini-m.actual { outline: 2px solid #fff; }
+.mini-m.pend { opacity: 0.55; }
+.resultado-movil.nada { background: #0b0b0f; border: 1px solid #555; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Sub, VistaHost } from "../../shared/tipos.ts";
+import { porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
 import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
@@ -199,51 +199,123 @@ function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: 
   );
 }
 
+/** Segundos ajustables en directo (se guardan en el contenido; valen desde la siguiente pregunta/turno). */
+function Segundos({ valor, etiqueta, a, campo, jugando }: { valor: number; etiqueta: string; a: A; campo: "segundos" | "segundosItem"; jugando: boolean }) {
+  const poner = (n: number) => a({ t: "config", campo, valor: Math.max(0, Math.min(600, n)) });
+  return (
+    <div className="fila">
+      <span className="suave">{etiqueta}:</span>
+      <button className="btn peq" onClick={() => poner(valor - 5)} aria-label="Menos 5 segundos">−5</button>
+      <b style={{ minWidth: "3.5em", textAlign: "center" }}>{valor ? `${valor} s` : "sin límite"}</b>
+      <button className="btn peq" onClick={() => poner(valor + 5)} aria-label="Más 5 segundos">+5</button>
+      {[10, 15, 20, 30, 45].map((n) => (
+        <button key={n} className={`btn peq ${valor === n ? "prim" : ""}`} onClick={() => poner(n)}>{n}</button>
+      ))}
+      {jugando && <span className="suave" style={{ fontSize: "0.85em" }}>(se aplica desde la siguiente)</span>}
+    </div>
+  );
+}
+
 function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "adivinar" }>; a: A }) {
   const v = h.estado.vivo;
   const corr = h.estado.correcciones[sub.id];
-  if (v.fase === "intro") return <Abrir a={a} texto={sub.segundos ? `▶️ Empezar (${sub.segundos} s)` : "▶️ Abrir respuestas"} />;
+  const pi = porItem(sub);
+  const rosco = sub.estilo === "rosco";
+  const nombreItem = rosco ? "letra" : "mezcla";
+  const seg = pi ? segundosItem(sub) : sub.segundos;
+  const marcas = h.publico.hojas;
+  const corregido = (i: number) => marcas && Object.values(marcas).some((x) => x.marcas[i] !== null);
+  const cfg = <Segundos valor={seg} etiqueta={pi ? `Tiempo por ${nombreItem}` : "Tiempo total"} campo={pi ? "segundosItem" : "segundos"} a={a} jugando={v.fase === "jugando"} />;
+
+  const celda = (eqId: string, i: number) => {
+    const val = v.hojas[eqId]?.valores[i] ?? "";
+    if (!corregido(i)) return val ? `✍️ ${val}` : <span className="suave">—</span>;
+    const ok = corr?.[eqId]?.[i];
+    if (!val.trim()) return <span title="Sin responder">⚫</span>;
+    return (
+      <button className={`btn peq ${ok ? "ok" : "ko"}`} title="Cambiar corrección" onClick={() => a({ t: "correccion", equipo: eqId, item: i, ok: !ok })}>
+        {ok ? "✓" : "✗"} {val}
+      </button>
+    );
+  };
+
+  if (v.fase === "intro")
+    return (
+      <>
+        {cfg}
+        <Abrir a={a} texto={pi ? `▶️ Primera ${nombreItem} (${sub.items.length})` : "▶️ Abrir respuestas"} />
+      </>
+    );
+
+  const it = sub.items[v.indice];
+  const tabla = (
+    <div style={{ overflowX: "auto" }}>
+      <table className="tabla">
+        <thead>
+          <tr>
+            <th>{rosco ? "Letra" : "Item"}</th>
+            <th>Solución</th>
+            {h.contenido.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre}{!pi && v.hojas[e.id]?.entregada ? " ✅" : ""}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {sub.items.map((x, i) => (
+            <tr key={i} style={pi && i === v.indice ? { background: "var(--panel2)" } : undefined}>
+              <td title={x.pregunta}>{x.etiqueta}</td>
+              <td className="suave">{x.respuesta}</td>
+              {h.contenido.equipos.map((e) => <td key={e.id}>{celda(e.id, i)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (!pi)
+    return (
+      <>
+        {cfg}
+        {tabla}
+        {v.fase === "revelar" && <div className="suave">Pulsa una respuesta para darla por buena o mala.</div>}
+        <div className="fila">
+          {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
+          {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
+        </div>
+      </>
+    );
+
+  const contestados = h.publico.contestados.length;
   return (
     <>
-      <div style={{ overflowX: "auto" }}>
+      {cfg}
+      <div className="panel col" style={{ background: "var(--bg2)" }}>
+        <div className="fila" style={{ justifyContent: "space-between" }}>
+          <b style={{ fontSize: "1.3em" }}>{it?.etiqueta} {rosco && <span className="suave" style={{ fontWeight: 400 }}>· {it?.pregunta}</span>}</b>
+          <span className="chip">{v.indice + 1}/{sub.items.length}</span>
+        </div>
+        <div>Solución: <span className="secreto" style={{ fontSize: "1.2em" }}>{it?.respuesta}</span></div>
         <table className="tabla">
-          <thead>
-            <tr>
-              <th>{sub.estilo === "rosco" ? "Letra" : "Item"}</th>
-              <th>Solución</th>
-              {h.contenido.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre} {v.hojas[e.id]?.entregada ? "✅" : ""}</th>)}
-            </tr>
-          </thead>
           <tbody>
-            {sub.items.map((it, i) => (
-              <tr key={i}>
-                <td title={it.pregunta}>{it.etiqueta}</td>
-                <td className="suave">{it.respuesta}</td>
-                {h.contenido.equipos.map((e) => {
-                  const val = v.hojas[e.id]?.valores[i] ?? "";
-                  const ok = corr?.[e.id]?.[i];
-                  return (
-                    <td key={e.id}>
-                      {v.fase === "revelar" ? (
-                        <button className={`btn peq ${ok ? "ok" : "ko"}`} title="Cambiar corrección" onClick={() => a({ t: "correccion", equipo: e.id, item: i, ok: !ok })}>
-                          {ok ? "✓" : "✗"} {val || "—"}
-                        </button>
-                      ) : (
-                        val || <span className="suave">—</span>
-                      )}
-                    </td>
-                  );
-                })}
+            {h.contenido.equipos.map((e) => (
+              <tr key={e.id}>
+                <td><span className="punto" style={{ background: e.color }} /> {e.nombre}</td>
+                <td>{celda(e.id, v.indice)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Pulsa una respuesta para darla por buena o mala. ⚫ = no respondió."}</div>
       </div>
-      {v.fase === "revelar" && <div className="suave">Pulsa una respuesta para darla por buena o mala.</div>}
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
-        {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
+        {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir ya</button>}
+        {v.fase === "revelar" && (
+          <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.items.length ? `➡️ Siguiente ${nombreItem}` : "🏁 Resultados"}</button>
+        )}
       </div>
+      <details>
+        <summary className="suave">Todas las {rosco ? "letras" : "respuestas"} (para corregir las anteriores)</summary>
+        {tabla}
+      </details>
     </>
   );
 }
@@ -296,6 +368,13 @@ function ControlTarjetas({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
           </button>
         ))}
       </div>
+      <div className="fila">
+        <label className="fila">
+          <input type="checkbox" checked={tarjetaEnTv(sub)} onChange={(e) => a({ t: "config", campo: "tarjetaEnTv", valor: e.target.checked })} />
+          Mostrar la tarjeta en la TV {sub.modo === "palabra" ? "(palabra + prohibidas)" : "(palabra + condición)"}
+        </label>
+      </div>
+      <Segundos valor={sub.segundos} etiqueta="Tiempo por turno" campo="segundos" a={a} jugando={v.fase === "jugando"} />
       {turno && v.fase === "intro" && <Abrir a={a} texto={`▶️ Empezar turno de ${turno.nombre} (${sub.segundos} s)`} />}
       {turno && v.fase === "jugando" && (
         <>
