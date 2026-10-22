@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { Publico } from "../../shared/tipos.ts";
 import { useTic } from "../socket.ts";
 
-export const FORMAS = ["▲", "◆", "●", "■"];
+export const FORMAS = ["A", "B", "C", "D"];
 
 export const conColor = (c: string) => ({ "--c": c }) as CSSProperties;
 
@@ -12,7 +12,7 @@ export function segundosRestantes(fin: number | null, desfase: number): number |
   return Math.max(0, Math.ceil((fin - (Date.now() + desfase)) / 1000));
 }
 
-/** Cuenta atrás circular. */
+/** Cuenta atrás: reloj digital en caja negra con barra que se vacía. */
 export function Cuenta({ fin, inicio, desfase, tam }: { fin: number | null; inicio: number; desfase: number; tam?: string }) {
   useTic(fin !== null, 200);
   const s = segundosRestantes(fin, desfase);
@@ -20,12 +20,11 @@ export function Cuenta({ fin, inicio, desfase, tam }: { fin: number | null; inic
   const total = Math.max(1, (fin! - inicio) / 1000);
   const frac = Math.min(1, s / total);
   return (
-    <div className={`cuenta ${s <= 5 ? "urgente" : ""}`} style={{ ...(tam ? { width: tam, height: tam, fontSize: `calc(${tam} * 0.42)` } : {}), ...(s >= 100 ? { fontSize: tam ? `calc(${tam} * 0.3)` : "4.4vh" } : {}) }}>
-      <svg viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="45" fill="none" stroke="#ffffff22" strokeWidth="8" />
-        <circle cx="50" cy="50" r="45" fill="none" stroke={s <= 5 ? "var(--ko)" : "var(--oro)"} strokeWidth="8" strokeDasharray={`${frac * 283} 283`} strokeLinecap="round" style={{ transition: "stroke-dasharray 0.25s linear" }} />
-      </svg>
-      {s}
+    <div className={`cuenta ${s <= 5 ? "urgente" : ""}`} style={tam ? { minWidth: tam } : undefined} role="timer" aria-label={`${s} segundos`}>
+      <div className="digitos" style={tam ? { fontSize: `calc(${tam} * 0.45)` } : undefined}>{String(s).padStart(2, "0")}</div>
+      <div className="barra">
+        <div style={{ width: `${frac * 100}%` }} />
+      </div>
     </div>
   );
 }

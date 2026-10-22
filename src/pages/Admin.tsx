@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Cancion, Contenido, ItemAdivinar, PreguntaTest, Producto, Sub, Tarjeta } from "../../shared/tipos.ts";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { FORMAS } from "../components/comun.tsx";
+import { Icono } from "../components/iconos.tsx";
 import { usePin } from "./Presentador.tsx";
 
 async function api<T>(pin: string, metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {
@@ -66,7 +67,7 @@ export function Admin() {
       const r = await api<{ rev: number }>(pin, "PUT", "/api/admin/contenido", c);
       setC({ ...c, rev: r.rev });
       setSucio(false);
-      setMsg({ ok: true, t: "Guardado ✅" });
+      setMsg({ ok: true, t: "Guardado" });
     } catch (e) {
       setMsg({ ok: false, t: (e as Error).message });
     }
@@ -78,13 +79,13 @@ export function Admin() {
     <div className="movil" style={{ maxWidth: 980 }}>
       <div className="panel fila" style={{ justifyContent: "space-between", position: "sticky", top: 8, zIndex: 5 }}>
         <div>
-          <h2>✏️ Contenido</h2>
+          <h2>Contenido</h2>
           <div className="suave">{n ? `Quedan ${n} campos con ✏️ por rellenar` : "Todo relleno"}</div>
         </div>
         <div className="fila">
           {msg && <span style={{ color: msg.ok ? "var(--ok)" : "var(--ko)" }}>{msg.t}</span>}
-          <a className="btn peq" href="/presentador" style={{ textDecoration: "none" }}>🎤 Presentador</a>
-          <button className="btn prim" disabled={!sucio} onClick={guardar}>💾 Guardar</button>
+          <a className="btn peq" href="/presentador" style={{ textDecoration: "none" }}><Icono n="micro" /> Presentador</a>
+          <button className="btn prim" disabled={!sucio} onClick={guardar}><Icono n="check" /> Guardar</button>
         </div>
       </div>
 
@@ -112,7 +113,7 @@ export function Admin() {
         return (
           <div key={pr.id} className="panel col">
             <div className="fila">
-              <input className="campo" style={{ width: "3.2em", textAlign: "center" }} value={pr.emoji} onChange={(e) => setPr({ ...pr, emoji: e.target.value })} />
+              <span className="etiqueta" style={{ minWidth: "5.5em" }}>Prueba {pi + 1}</span>
               <input className="campo" style={{ flex: 1, fontWeight: 800 }} value={pr.titulo} onChange={(e) => setPr({ ...pr, titulo: e.target.value })} />
             </div>
             {pr.subs.length > 1 && (
@@ -196,7 +197,7 @@ function Archivo({ url, tipo, subir, on }: { url?: string; tipo: "audio" | "imag
       {url && (tipo === "audio" ? <audio controls src={url} style={{ width: "100%" }} preload="none" /> : <img src={url} alt="" style={{ maxHeight: 90, maxWidth: 160, borderRadius: 8 }} />)}
       <div className="fila">
         <label className="btn peq">
-          {cargando ? "Subiendo…" : url ? "Cambiar" : tipo === "audio" ? "🎵 Subir MP3" : "🖼️ Subir foto"}
+          <Icono n={tipo === "audio" ? "nota" : "subir"} /> {cargando ? "Subiendo…" : url ? "Cambiar" : tipo === "audio" ? "Subir MP3" : "Subir foto"}
           <input
             type="file"
             hidden
@@ -241,7 +242,7 @@ function Lista<T>({ items, onChange, nuevo, render, nombre }: { items: T[]; onCh
             <div className="fila">
               <button className="btn peq" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">↑</button>
               <button className="btn peq" onClick={() => mover(i, 1)} disabled={i === items.length - 1} aria-label="Bajar">↓</button>
-              <button className="btn peq" onClick={() => confirm(`¿Borrar ${nombre.toLowerCase()} ${i + 1}?`) && onChange(items.filter((_, j) => j !== i))} aria-label="Borrar">🗑️</button>
+              <button className="btn peq" onClick={() => confirm(`¿Borrar ${nombre.toLowerCase()} ${i + 1}?`) && onChange(items.filter((_, j) => j !== i))} aria-label="Borrar"><Icono n="basura" /></button>
             </div>
           </div>
           {render(it, (n) => onChange(items.map((x, j) => (j === i ? n : x))), i)}
@@ -267,7 +268,7 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
   return (
     <details className="panel" style={{ background: "var(--panel2)" }}>
       <summary style={{ cursor: "pointer", fontWeight: 700 }}>
-        {sub.titulo} <span className="suave" style={{ fontWeight: 400 }}>· {TIPO[sub.tipo]}</span> {pend > 0 && <span className="chip" style={{ background: "var(--oro)", color: "#241400" }}>✏️ {pend}</span>}
+        {sub.titulo} <span className="suave" style={{ fontWeight: 400 }}>· {TIPO[sub.tipo]}</span> {pend > 0 && <span className="chip" style={{ background: "var(--oro)", color: "var(--tinta)" }}><Icono n="lapiz" /> {pend} por rellenar</span>}
       </summary>
       <div className="col" style={{ marginTop: 12 }}>
         <div className="fila">
@@ -284,7 +285,7 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
                   <option value="aciertos">1 punto por acierto</option>
                 </select>
               </Campo>
-              <label className="fila suave"><input type="checkbox" checked={sub.rapidez} onChange={(e) => set({ rapidez: e.target.checked })} /> ⚡ Plus por rapidez</label>
+              <label className="fila suave"><input type="checkbox" checked={sub.rapidez} onChange={(e) => set({ rapidez: e.target.checked })} /> <Icono n="rayo" /> Plus por rapidez</label>
               {sub.rapidez && (
                 <Campo etiqueta="Plus para el 1º, 2º, 3º… en acertar (separados por comas)">
                   <Texto v={(sub.bonus ?? BONUS_RAPIDEZ).join(", ")} on={(t) => set({ bonus: t.split(",").map((x) => Number(x.trim().replace(/\s/g, ""))).filter((n) => Number.isFinite(n) && n >= 0) })} />
@@ -324,7 +325,7 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
             <div className="fila">
               <Campo etiqueta="Cómo se juega">
                 <select className="campo" value={sub.modo ?? "porItem"} onChange={(e) => set({ modo: e.target.value as "porItem" })}>
-                  <option value="porItem">De uno en uno (cuenta atrás y ✅/❌ por cada uno)</option>
+                  <option value="porItem">De uno en uno (cuenta atrás y acierto/fallo en cada uno)</option>
                   <option value="hoja">Todo a la vez (hoja que se entrega)</option>
                 </select>
               </Campo>

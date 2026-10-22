@@ -562,7 +562,8 @@ export class Juego {
     if (!a) return base;
     const { sub, prueba } = a;
     const revelado = v.fase === "revelar" || v.fase === "resultado";
-    base.sub = { id: sub.id, tipo: sub.tipo, titulo: sub.titulo, descripcion: sub.descripcion, pruebaTitulo: prueba.titulo, emoji: prueba.emoji, total: totalItems(sub) };
+    const pruebaNum = this.contenido.pruebas.indexOf(prueba) + 1;
+    base.sub = { id: sub.id, tipo: sub.tipo, titulo: sub.titulo, descripcion: sub.descripcion, pruebaTitulo: prueba.titulo, pruebaNum, emoji: prueba.emoji, total: totalItems(sub) };
     base.crudo = e.crudo[sub.id] ?? {};
     base.confirmado = !!e.puntos[sub.id];
     base.ranking = puntosSub(sub, e, this.ids, this.contenido.tabla) ?? Object.fromEntries(this.ids.map((id) => [id, 0]));

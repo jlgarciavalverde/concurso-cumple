@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Icono, Insignia, ICONOS, type NombreIcono } from "../components/iconos.tsx";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
 import { conColor, Cuenta, equipoDe, FORMAS, gruposPodio, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
@@ -29,7 +30,7 @@ export function Jugar() {
     return (
       <div className="movil">
         <div className="movil-cuerpo">
-          <div className="espera"><div className="grande">🎉</div>¡Al concurso!</div>
+          <div className="espera"><div className="marquesina" style={{ fontFamily: "var(--titular)", fontSize: "1.6em", color: "var(--bombilla)", textTransform: "uppercase" }}>¡Al concurso!</div></div>
           {error && <div className="error">{error}</div>}
           <form
             className="col"
@@ -67,7 +68,7 @@ export function Jugar() {
                 }}
               >
                 {e.nombre}
-                <span style={{ fontWeight: 400, fontSize: "0.7em" }}>{e.conectados ? `${e.conectados} 📱` : ""}</span>
+                <span style={{ fontWeight: 400, fontSize: "0.7em" }}>{e.conectados ? <><Icono n="telefono" /> {e.conectados}</> : ""}</span>
               </button>
             ))}
           </div>
@@ -78,10 +79,10 @@ export function Jugar() {
   const v = datos as VistaEquipo;
   return (
     <div className="movil">
-      {!conectado && <div className="banda-conexion">📡 Reconectando… no cerréis la página</div>}
+      {!conectado && <div className="banda-conexion"><Icono n="recargar" /> Reconectando… no cerréis la página</div>}
       <Avisos v={v} />
       <div className="movil-cab" style={{ background: yo.color }}>
-        <button className="nombre-btn" onClick={() => setNombrando(true)} aria-label="Cambiar el nombre del equipo">{yo.nombre} ✏️</button>
+        <button className="nombre-btn" onClick={() => setNombrando(true)} aria-label="Cambiar el nombre del equipo">{yo.nombre} <Icono n="lapiz" tam="0.9em" /></button>
         <span>{fmt(yo.total)} pts</span>
       </div>
       <div className="movil-cuerpo">
@@ -115,10 +116,10 @@ export function Jugar() {
 
 type Enviar = (a: unknown) => void;
 
-function Espera({ emoji = "👀", texto }: { emoji?: string; texto: string }) {
+function Espera({ icono = "tv", texto }: { icono?: NombreIcono | ReactNode; texto: string }) {
   return (
     <div className="espera">
-      <div className="grande">{emoji}</div>
+      <div className="grande">{typeof icono === "string" && icono in ICONOS ? <Icono n={icono as NombreIcono} tam="1.2em" /> : icono}</div>
       {texto}
     </div>
   );
@@ -135,7 +136,7 @@ function Nombre({ actual, onGuardar }: { actual: string; onGuardar: (n: string) 
         onGuardar(txt);
       }}
     >
-      <div className="espera"><div className="grande">🏷️</div>¿Cómo se llama vuestro equipo?</div>
+      <div className="espera"><div className="grande"><Icono n="lapiz" tam="1.2em" /></div>¿Cómo se llama vuestro equipo?</div>
       <input className="campo" style={{ fontSize: "1.3em" }} maxLength={20} autoFocus placeholder={actual} value={txt} onChange={(e) => setTxt(e.target.value)} />
       <button className="btn prim grande" disabled={!txt.trim()}>Guardar</button>
       <button type="button" className="btn" onClick={() => onGuardar("")}>Dejar «{actual}»</button>
@@ -154,9 +155,9 @@ function PodioMovil({ v }: { v: VistaEquipo }) {
     navigator.vibrate?.([200, 100, 200, 100, 400]);
     void confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
   }, [ganador]);
-  if (!revelado) return <Espera emoji="🥁" texto="Redoble de tambores… ¡mirad la pantalla!" />;
-  if (ganador) return <Espera emoji="🏆" texto="¡¡HABÉIS GANADO!!" />;
-  return <Espera emoji={grupos[i].puesto === 2 ? "🥈" : grupos[i].puesto === 3 ? "🥉" : "👏"} texto={`¡Sois ${grupos[i].puesto}º con ${fmt(grupos[i].total)} puntos!`} />;
+  if (!revelado) return <Espera icono="tv" texto="Redoble de tambores… ¡mirad la pantalla!" />;
+  if (ganador) return <Espera icono="trofeo" texto="¡¡HABÉIS GANADO!!" />;
+  return <Espera icono={`${grupos[i].puesto}º`} texto={`¡Sois ${grupos[i].puesto}º con ${fmt(grupos[i].total)} puntos!`} />;
 }
 
 function Avisos({ v }: { v: VistaEquipo }) {
@@ -183,13 +184,13 @@ function Posicion({ v }: { v: VistaEquipo }) {
 function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
   const s = v.sub;
   if (v.vista === "podio") return <PodioMovil v={v} />;
-  if (v.vista === "marcador") return <><Espera emoji="📊" texto="Marcador en la pantalla" /><Posicion v={v} /></>;
-  if (!s) return <><Espera emoji="⏳" texto="Esperando a que empiece la siguiente prueba…" /><Posicion v={v} /></>;
+  if (v.vista === "marcador") return <><Espera icono="marcador" texto="Marcador en la pantalla" /><Posicion v={v} /></>;
+  if (!s) return <><Espera icono="reloj" texto="Esperando a que empiece la siguiente prueba…" /><Posicion v={v} /></>;
   if (v.fase === "resultado") {
     const p = v.ranking?.[v.yo] ?? 0;
     return (
       <>
-        <Espera emoji={p >= 10 ? "🏆" : p > 0 ? "👏" : "😅"} texto={s.titulo} />
+        <Espera icono={p >= 10 ? "trofeo" : "marcador"} texto={s.titulo} />
         <div className="resultado-movil bien">+{fmt(p)} puntos al marcador</div>
         <Posicion v={v} />
       </>
@@ -198,7 +199,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
   if (v.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual")
     return (
       <>
-        <Espera emoji={s.emoji} texto={`${s.pruebaTitulo}: ${s.titulo}`} />
+        <Espera icono={String(s.pruebaNum)} texto={`Prueba ${s.pruebaNum} · ${s.pruebaTitulo}: ${s.titulo}`} />
         {s.descripcion && <div className="espera suave">{s.descripcion}</div>}
         <div className="espera suave">¡Preparados! Empieza en nada…</div>
       </>
@@ -216,8 +217,8 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
     case "tarjetas":
     case "manual": {
       const t = equipoDe(v, v.turno);
-      if (t?.id === v.yo) return <Espera emoji="🔥" texto={s.tipo === "tarjetas" ? "¡Os toca! Quien explica, que mire la tarjeta." : "¡Os toca!"} />;
-      return <Espera emoji={s.emoji} texto={t ? `Turno de ${t.nombre}` : s.descripcion ?? s.titulo} />;
+      if (t?.id === v.yo) return <Espera icono="micro" texto={s.tipo === "tarjetas" ? "¡Os toca! Quien explica, que mire la tarjeta." : "¡Os toca!"} />;
+      return <Espera icono="usuarios" texto={t ? `Turno de ${t.nombre}` : s.descripcion ?? s.titulo} />;
     }
   }
 }
@@ -230,12 +231,14 @@ function TestMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
     const bien = mia === v.solucion?.correcta;
     return (
       <>
-        <div className={`resultado-movil ${bien ? "bien" : "mal"}`}>{mia === undefined ? "⏰ Sin respuesta" : bien ? "✅ ¡Correcto!" : "❌ Fallo"}{bien && v.bonus?.[v.yo] ? ` ⚡ +${String(v.bonus[v.yo]).replace(".", ",")} por rapidez` : ""}</div>
+        <div className={`resultado-movil ${bien ? "bien" : "mal"}`}><Insignia m={mia === undefined ? "nada" : bien ? "ok" : "ko"} />
+          {mia === undefined ? "Sin respuesta" : bien ? "¡Correcto!" : "Fallo"}
+          {bien && v.bonus?.[v.yo] ? <span style={{ fontSize: "0.7em" }}> <Icono n="rayo" />+{fmt(v.bonus[v.yo])} por rapidez</span> : null}</div>
         <div className="espera suave">Correcta: {FORMAS[v.solucion?.correcta ?? 0]} {q.opciones?.[v.solucion?.correcta ?? 0]}</div>
       </>
     );
   }
-  if (mia !== undefined) return <Espera emoji={FORMAS[mia]} texto="Respuesta enviada. ¡A esperar!" />;
+  if (mia !== undefined) return <Espera icono={FORMAS[mia]} texto="Respuesta enviada. ¡A esperar!" />;
   return (
     <>
       <div className="fila" style={{ justifyContent: "space-between" }}>
@@ -289,7 +292,7 @@ function PrecioMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; 
   );
 }
 
-const MARCA_TXT = { ok: "✅ ¡Correcto!", medio: "🟡 Medio acierto", ko: "❌ Fallo", nada: "⚫ Sin responder" } as const;
+const MARCA_TXT = { ok: "¡Correcto!", medio: "Medio acierto", ko: "Fallo", nada: "Sin responder" } as const;
 
 /** Rosco / olores / sabor de uno en uno: una respuesta por item, se corrige al acabar el tiempo o al responder todos. */
 function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
@@ -318,12 +321,12 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
           {items.map((x, i) => (
             <div key={i} className={`letra ${marcas[i] ?? "pend"} ${i === v.indice ? "actual" : ""}`} style={posRosco(i, items.length)}>{x.etiqueta}</div>
           ))}
-          <div className="centro" style={{ fontSize: "0.95em" }}>{marcas.filter((x) => x === "ok").length} ✅</div>
+          <div className="centro" style={{ fontSize: "0.95em" }}>{marcas.filter((x) => x === "ok").length} aciertos</div>
         </div>
       ) : (
         <div className="fila" style={{ justifyContent: "center", gap: 6 }}>
           {items.map((_, i) => (
-            <span key={i} className={`mini-m ${marcas[i] ?? "pend"} ${i === v.indice ? "actual" : ""}`}>{marcas[i] ? MARCA_TXT[marcas[i]!].slice(0, 2) : i + 1}</span>
+            <span key={i} className={`mini-m ${marcas[i] ?? "pend"} ${i === v.indice ? "actual" : ""}`}>{marcas[i] ? <Insignia m={marcas[i]!} tam="26px" /> : i + 1}</span>
           ))}
         </div>
       )}
@@ -332,6 +335,7 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
         {v.fase === "revelar" ? (
           <>
             <div className={`resultado-movil ${m === "ok" ? "bien" : m === "ko" ? "mal" : m === "medio" ? "medio" : "nada"}`}>
+              {m && <Insignia m={m} />}
               {m ? MARCA_TXT[m] : "…"}
               {m === "ok" || m === "medio" ? ` (+${String(v.hojas?.[v.yo]?.puntos[v.indice] ?? 0).replace(".", ",")})` : ""}
             </div>
@@ -339,7 +343,7 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
             {hoja?.valores[v.indice] && <div className="suave">Vosotros: {hoja.valores[v.indice]}</div>}
           </>
         ) : enviada ? (
-          <Espera emoji="✍️" texto={`Enviado: «${hoja?.valores[v.indice]}». ¡A esperar!`} />
+          <Espera icono="lapiz" texto={`Enviado: «${hoja?.valores[v.indice]}». ¡A esperar!`} />
         ) : (
           <form
             className="col"
@@ -387,14 +391,14 @@ function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
           {items.map((it, i) => (
             <div key={i} className="fila" style={{ justifyContent: "space-between" }}>
               <span>{it.etiqueta}: {hoja?.valores[i] || "—"}</span>
-              <span>{ac[i] ? "✅" : `❌ ${v.solucion?.respuestas?.[i] ?? ""}`}</span>
+              <span className="fila" style={{ gap: 6 }}><Insignia m={ac[i] ? "ok" : "ko"} tam="1.2em" />{ac[i] ? "" : v.solucion?.respuestas?.[i] ?? ""}</span>
             </div>
           ))}
         </div>
       </>
     );
   }
-  if (hoja?.entregada) return <Espera emoji="✅" texto="Entregado. ¡A esperar la corrección!" />;
+  if (hoja?.entregada) return <Espera icono="check" texto="Entregado. ¡A esperar la corrección!" />;
 
   const cambiar = (i: number, valor: string) => {
     setLocal((l) => l.map((x, j) => (j === i ? valor : x)));
@@ -442,7 +446,7 @@ function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
               placeholder="Respuesta"
             />
             <div className="fila">
-              <button className="btn" onClick={() => setActual((actual + 1) % items.length)}>Pasapalabra ➜</button>
+              <button className="btn" onClick={() => setActual((actual + 1) % items.length)}>Pasapalabra <Icono n="siguiente" /></button>
             </div>
           </div>
         </>
@@ -462,7 +466,7 @@ function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
 }
 
 function Pulsador({ v, enviar }: { v: VistaEquipo; enviar: Enviar }) {
-  if (v.fase === "revelar") return <Espera emoji="🎶" texto={v.solucion?.texto ?? ""} />;
+  if (v.fase === "revelar") return <Espera icono="nota" texto={v.solucion?.texto ?? ""} />;
   const bloqueado = v.bloqueados.includes(v.yo);
   const otro = v.pulsado && v.pulsado !== v.yo ? equipoDe(v, v.pulsado) : null;
   return (
@@ -478,7 +482,7 @@ function Pulsador({ v, enviar }: { v: VistaEquipo; enviar: Enviar }) {
       >
         {v.pulsado === v.yo ? "¡Vuestro turno!" : bloqueado ? "Bloqueados" : otro ? otro.nombre : "¡PULSA!"}
       </button>
-      <div className="espera">{v.pulsado === v.yo ? "Decid la canción en voz alta 🎤" : otro ? `Contesta ${otro.nombre}…` : bloqueado ? "Habéis fallado esta" : ""}</div>
+      <div className="espera">{v.pulsado === v.yo ? "Decid la canción en voz alta" : otro ? `Contesta ${otro.nombre}…` : bloqueado ? "Habéis fallado esta" : ""}</div>
     </>
   );
 }

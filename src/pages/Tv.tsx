@@ -1,8 +1,9 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Marca, Publico } from "../../shared/tipos.ts";
+import type { Publico } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
 import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, gruposPodio, ponerVolumen, posRosco, probarSonido, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
+import { Icono, Insignia } from "../components/iconos.tsx";
 import { useCanal } from "../socket.ts";
 
 const AUTH = { rol: "tv" };
@@ -58,10 +59,10 @@ export function Tv() {
   return (
     <div className="tv" style={{ "--n": enJuego.length } as CSSProperties}>
       <div className="tv-cab">
-        <div className="marca">🎉 {p.titulo}</div>
+        <div className="marca marquesina">{p.titulo}</div>
         <div className="unete">
           {location.host} · código <b>{p.codigo}</b> {!conectado && <span style={{ color: "var(--ko)" }}>· sin conexión</span>}
-          {!sonidoOk && <span className="sin-sonido"> · 🔇 sin sonido</span>}
+          {!sonidoOk && <span className="sin-sonido"><Icono n="silencio" /> sin sonido</span>}
         </div>
       </div>
       <div className="tv-centro">
@@ -171,8 +172,10 @@ function Centro({ p, desfase, progreso, suena }: { p: Publico; desfase: number; 
   if (p.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual")
     return (
       <>
-        <div className="tv-emoji">{s.emoji}</div>
-        <div className="tv-sub">{s.pruebaTitulo}</div>
+        <div className="marquesina" style={{ padding: "2.4vh 4vw" }}>
+          <div className="tv-numero">{String(s.pruebaNum).padStart(2, "0")}</div>
+        </div>
+        <div className="tv-sub etiqueta">Prueba {s.pruebaNum} · {s.pruebaTitulo}</div>
         <div className="tv-titulo">{s.titulo}</div>
         {s.descripcion && <div className="tv-sub">{s.descripcion}</div>}
       </>
@@ -210,7 +213,7 @@ function Lobby({ p }: { p: Publico }) {
             <div key={e.id} className="fila" style={{ fontSize: "3.6vh", fontWeight: 800 }}>
               <span className="punto" style={{ background: e.color, width: "3vh", height: "3vh" }} />
               {e.nombre}
-              <span className="suave" style={{ fontSize: "2.4vh" }}>{e.conectados ? `✅ ${e.conectados} móvil${e.conectados > 1 ? "es" : ""}` : "esperando…"}</span>
+              <span className="suave" style={{ fontSize: "2.4vh" }}>{e.conectados ? <><Icono n="telefono" /> {e.conectados} móvil{e.conectados > 1 ? "es" : ""}</> : "esperando…"}</span>
             </div>
           ))}
         </div>
@@ -224,7 +227,7 @@ function Contestados({ p }: { p: Publico }) {
     <div className="contestados">
       {p.equipos.map((e) => (
         <span key={e.id} className={`chip ${p.contestados.includes(e.id) ? "si" : ""}`} style={conColor(e.color)}>
-          {p.contestados.includes(e.id) ? "✓ " : ""}
+          {p.contestados.includes(e.id) && <Icono n="check" />}
           {e.nombre}
         </span>
       ))}
@@ -233,7 +236,13 @@ function Contestados({ p }: { p: Publico }) {
 }
 
 function Contador({ p }: { p: Publico }) {
-  return <div className="tv-sub">{p.sub!.titulo} · {p.indice + 1}/{p.sub!.total}</div>;
+  const nombre = p.sub!.tipo === "cancion" ? "Canción" : p.sub!.tipo === "precio" ? "Producto" : "Pregunta";
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return (
+    <div className="tv-sub etiqueta">
+      {nombre} {dos(p.indice + 1)} / {dos(p.sub!.total)} · {p.sub!.titulo}
+    </div>
+  );
 }
 
 function Test({ p, desfase }: { p: Publico; desfase: number }) {
@@ -244,7 +253,7 @@ function Test({ p, desfase }: { p: Publico; desfase: number }) {
     <>
       <Contador p={p} />
       <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
-        <div className="tv-pregunta">{q.texto}</div>
+        <div className="tarjeta-preg tv-pregunta">{q.texto}</div>
         {!rev && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} />}
       </div>
       {q.imagen && <img className="tv-imagen" src={q.imagen} alt="" />}
@@ -258,7 +267,7 @@ function Test({ p, desfase }: { p: Publico; desfase: number }) {
               {quien.map((e) => (
                 <span key={e.id} className="chip" style={{ background: e.color, color: "#fff", fontSize: "2.2vh" }}>
                   {e.nombre}
-                  {p.bonus?.[e.id] ? ` ⚡+${String(p.bonus[e.id]).replace(".", ",")}` : ""}
+                  {p.bonus?.[e.id] ? <> <Icono n="rayo" />+{fmt(p.bonus[e.id])}</> : null}
                 </span>
               ))}
             </div>
@@ -283,7 +292,7 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
   return (
     <>
       <Contador p={p} />
-      <div className="tv-pregunta">{q.texto}</div>
+      <div className="tarjeta-preg tv-pregunta">{q.texto}</div>
       {q.imagen && <img className="tv-imagen" src={q.imagen} alt="" />}
       {!rev ? (
         <>
@@ -296,7 +305,7 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
           <div className="fila" style={{ gap: "2vw", justifyContent: "center" }}>
             {ofertas.map(({ e, v }) => (
               <div key={e.id} className={`tv-eq ${p.ganadores?.includes(e.id) ? "on" : ""}`} style={conColor(e.color)}>
-                <span>{p.ganadores?.includes(e.id) ? "🏆 " : ""}{e.nombre}&nbsp;</span>
+                <span>{p.ganadores?.includes(e.id) && <Icono n="trofeo" />} {e.nombre}&nbsp;</span>
                 <span className="n">{v === undefined ? "—" : euros(v)}</span>
               </div>
             ))}
@@ -307,7 +316,6 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
   );
 }
 
-const MARCA: Record<NonNullable<Marca>, string> = { ok: "✅", medio: "🟡", ko: "❌", nada: "⚫" };
 
 function AdivinarTv({ p, desfase }: { p: Publico; desfase: number }) {
   const s = p.sub!;
@@ -349,7 +357,7 @@ function AdivinarTv({ p, desfase }: { p: Publico; desfase: number }) {
                   <div className="centro" style={{ color: e.color, fontSize: "2.6vh" }}>
                     {e.nombre}
                     <br />
-                    <span style={{ fontSize: "5vh" }}>{rev && m ? MARCA[m] : p.contestados.includes(e.id) ? "✍️" : "…"}</span>
+                    <span style={{ fontSize: "5vh" }}>{rev && m ? <Insignia m={m} tam="6vh" /> : p.contestados.includes(e.id) ? <Icono n="lapiz" /> : "…"}</span>
                   </div>
                 </div>
                 <div className="tv-sub" style={{ fontSize: "2.4vh", minHeight: "3vh" }}>{rev ? h?.valores[p.indice] || "sin responder" : `${h?.marcas.filter((x) => x === "ok").length ?? 0} aciertos`}</div>
@@ -366,12 +374,12 @@ function AdivinarTv({ p, desfase }: { p: Publico; desfase: number }) {
               <div key={e.id} className={`hoja ${rev && m ? `marca-${m}` : ""}`} style={conColor(e.color)}>
                 <div className="fila" style={{ justifyContent: "space-between" }}>
                   <b>{e.nombre}</b>
-                  <span style={{ fontSize: "4.4vh" }}>{rev && m ? MARCA[m] : p.contestados.includes(e.id) ? "✍️" : "…"}</span>
+                  <span style={{ fontSize: "4.4vh" }}>{rev && m ? <Insignia m={m} tam="5vh" /> : p.contestados.includes(e.id) ? <Icono n="lapiz" /> : "…"}</span>
                 </div>
                 <div style={{ fontSize: "3vh", minHeight: "4vh", fontWeight: 700 }}>{rev ? h?.valores[p.indice] || "sin responder" : p.contestados.includes(e.id) ? "¡Respondido!" : "Pensando…"}</div>
                 <div className="fila" style={{ gap: 4, marginTop: "1vh" }}>
                   {items.map((_, i) => (
-                    <span key={i} className={`mini ${h?.marcas[i] ?? "pend"} ${i === p.indice ? "actual" : ""}`}>{h?.marcas[i] ? MARCA[h.marcas[i]!] : i + 1}</span>
+                    <span key={i} className={`mini ${h?.marcas[i] ?? "pend"} ${i === p.indice ? "actual" : ""}`}>{h?.marcas[i] ? <Insignia m={h.marcas[i]!} tam="3vh" /> : i + 1}</span>
                   ))}
                 </div>
               </div>
@@ -402,11 +410,11 @@ function HojasTv({ p, desfase }: { p: Publico; desfase: number }) {
                 items.map((it, i) => (
                   <div key={i} className="l">
                     <span>{it.etiqueta}: {h?.valores[i] || "—"}</span>
-                    <span>{MARCA[h?.marcas[i] ?? "nada"]}</span>
+                    <Insignia m={h?.marcas[i] ?? "nada"} tam="3.4vh" />
                   </div>
                 ))
               ) : (
-                <div style={{ fontSize: "3.4vh", marginTop: "1vh" }}>{h?.entregada ? "✅ Entregado" : `${h?.contestadas ?? 0}/${items.length}`}</div>
+                <div style={{ fontSize: "3.4vh", marginTop: "1vh" }}>{h?.entregada ? <><Icono n="check" /> Entregado</> : `${h?.contestadas ?? 0}/${items.length}`}</div>
               )}
             </div>
           );
@@ -423,12 +431,12 @@ function CancionTv({ p, progreso }: { p: Publico; progreso: Progreso }) {
     return (
       <>
         <Contador p={p} />
-        <div className="tv-emoji">🎶</div>
+        <Icono n="nota" tam="12vh" style={{ color: "var(--bombilla)" }} />
         <div className="revela">{p.solucion?.texto}</div>
         {p.ganadores?.length ? (
           p.ganadores.map((id) => {
             const g = equipoDe(p, id)!;
-            return <div key={id} className="pulsado" style={{ background: g.color, fontSize: "5vh" }}>✅ {g.nombre} +1</div>;
+            return <div key={id} className="pulsado" style={{ background: g.color, fontSize: "5vh" }}><Icono n="check" /> {g.nombre} +1</div>;
           })
         ) : (
           <div className="tv-sub">Nadie la acertó</div>
@@ -442,8 +450,8 @@ function CancionTv({ p, progreso }: { p: Publico; progreso: Progreso }) {
         <div className="pulsado" style={{ background: e.color }}>{e.nombre}</div>
       ) : (
         <>
-          <div className="tv-emoji" style={{ animation: p.sonando ? "latido 0.6s infinite alternate" : undefined }}>{p.sonando ? "🎵" : "⏸️"}</div>
-          <div className="tv-pregunta">{progreso?.acabado ? "⏹️ Fin del fragmento… ¿quién la sabe?" : "¿Qué canción es?"}</div>
+          <Icono n={p.sonando && !progreso?.acabado ? "nota" : "pausa"} tam="14vh" style={{ color: "var(--bombilla)", animation: p.sonando && !progreso?.acabado ? "latido 0.6s infinite alternate" : undefined }} />
+          <div className="tv-pregunta">{progreso?.acabado ? "Fin del fragmento… ¿quién la sabe?" : "¿Qué canción es?"}</div>
           {!p.audio && <div className="tv-sub">(sin audio: el presentador la pone aparte)</div>}
           {p.audio && progreso && p.audio.fragmento > 0 && (
             <div className="barra-frag" aria-hidden>
@@ -456,7 +464,7 @@ function CancionTv({ p, progreso }: { p: Publico; progreso: Progreso }) {
         <div className="contestados">
           {p.bloqueados.map((id) => {
             const b = equipoDe(p, id)!;
-            return <span key={id} className="chip si" style={{ ...conColor("#555"), opacity: 0.8 }}>❌ {b.nombre}</span>;
+            return <span key={id} className="chip si" style={{ ...conColor("#555"), opacity: 0.8 }}><Icono n="cruz" /> {b.nombre}</span>;
           })}
         </div>
       )}
@@ -469,7 +477,7 @@ function TarjetasTv({ p, desfase }: { p: Publico; desfase: number }) {
   const e = equipoDe(p, p.turno);
   return (
     <>
-      <div className="tv-sub">{s.emoji} {s.titulo}</div>
+      <div className="tv-sub etiqueta">Prueba {s.pruebaNum} · {s.titulo}</div>
       {!e ? (
         <>
           <div className="tv-titulo">{s.titulo}</div>
@@ -480,15 +488,15 @@ function TarjetasTv({ p, desfase }: { p: Publico; desfase: number }) {
           <div className="fila" style={{ gap: "3vw", justifyContent: "center" }}>
             <div className="pulsado" style={{ background: e.color, fontSize: p.tarjeta ? "4.5vh" : "8vh", padding: "1.5vh 3vw" }}>Turno: {e.nombre}</div>
             {p.fase === "jugando" && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam={p.tarjeta ? "12vh" : "18vh"} />}
-            <div className="revela" style={{ fontSize: p.tarjeta ? "4vh" : undefined }}>{p.crudo[e.id] ?? 0} aciertos</div>
+            <div className="revela" style={{ fontSize: p.tarjeta ? "4vh" : undefined }}>{p.crudo[e.id] ?? 0} {(p.crudo[e.id] ?? 0) === 1 ? "acierto" : "aciertos"}</div>
           </div>
           {p.tarjeta ? (
             <div className="tarjeta-tv">
-              <div className="aviso">🙈 Solo mira quien {s.modo === "dibujo" ? "dibuja" : "explica"}</div>
+              <div className="aviso"><Icono n="candado" /> Solo mira quien {s.modo === "dibujo" ? "dibuja" : "explica"}</div>
               <div className="pal">{p.tarjeta.palabra}</div>
               {p.tarjeta.condicion && <div className="cond">{p.tarjeta.condicion}</div>}
               {p.tarjeta.prohibidas && p.tarjeta.prohibidas.filter(Boolean).length > 0 && (
-                <div className="proh">{p.tarjeta.prohibidas.filter(Boolean).map((x) => <span key={x}>🚫 {x}</span>)}</div>
+                <div className="proh">{p.tarjeta.prohibidas.filter(Boolean).map((x) => <span key={x}>{x}</span>)}</div>
               )}
             </div>
           ) : (
@@ -505,7 +513,8 @@ function ManualTv({ p, desfase }: { p: Publico; desfase: number }) {
   const e = equipoDe(p, p.turno);
   return (
     <>
-      <div className="tv-titulo">{s.emoji} {s.titulo}</div>
+      <div className="tv-sub etiqueta">Prueba {s.pruebaNum} · {s.pruebaTitulo}</div>
+      <div className="tv-titulo">{s.titulo}</div>
       {s.descripcion && <div className="tv-sub">{s.descripcion}</div>}
       {e && <div className="pulsado" style={{ background: e.color, fontSize: "6vh" }}>Turno: {e.nombre}</div>}
       {p.fase === "jugando" && p.fin !== null && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam="20vh" />}
@@ -559,7 +568,7 @@ function Clasificacion({ p }: { p: Publico }) {
           const total = despues ? e.total : antes(e.id);
           return (
             <div key={e.id} className="clasif-fila" style={{ top: `${pos * alto}vh`, height: `${alto - 2}vh` }}>
-              <span className="clasif-pos">{pos + 1}º</span>
+              <span className="clasif-pos">{pos + 1}<small>º</small></span>
               <div className="clasif-barra">
                 <div style={{ width: `${Math.max(4, (total / max) * 100)}%`, background: e.color }}>
                   <span>{e.nombre}</span>
@@ -583,7 +592,7 @@ function ResultadoRonda({ p }: { p: Publico }) {
   const filas = [...p.equipos].sort((a, b) => (p.ranking?.[b.id] ?? 0) - (p.ranking?.[a.id] ?? 0));
   return (
     <>
-      <div className="tv-sub">{p.sub!.emoji} {p.sub!.pruebaTitulo}</div>
+      <div className="tv-sub etiqueta">Prueba {p.sub!.pruebaNum} · {p.sub!.pruebaTitulo}</div>
       <div className="tv-titulo" style={{ fontSize: "6vh" }}>{p.sub!.titulo}</div>
       <table className="tabla-res">
         <thead>
@@ -619,9 +628,9 @@ function Desglose({ p }: { p: Publico }) {
           </tr>
         </thead>
         <tbody>
-          {p.desglose.map((f) => (
+          {p.desglose.map((f, i) => (
             <tr key={f.pruebaId}>
-              <td>{f.emoji} {f.titulo}</td>
+              <td>{f.pruebaId === "ajustes" ? "" : `${i + 1}. `}{f.titulo}</td>
               {p.equipos.map((e) => <td key={e.id}>{fmt(f.puntos[e.id])}</td>)}
             </tr>
           ))}
@@ -664,7 +673,7 @@ function Podio({ p, suena }: { p: Publico; suena: boolean }) {
   const nombres = ganadores.map((id) => equipoDe(p, id)?.nombre).join(" y ");
   return (
     <>
-      <div className="tv-titulo">{ganadores.length ? `🏆 ¡${nombres} ${ganadores.length > 1 ? "ganan" : "gana"}!` : paso ? "🥁 …" : "🥁 ¿Quién ganará?"}</div>
+      <div className="tv-titulo">{ganadores.length ? `🏆 ¡${nombres} ${ganadores.length > 1 ? "ganan" : "gana"}!` : paso ? "Y el siguiente puesto es…" : "¿Quién ganará?"}</div>
       <div className={`podio ${ganadores.length ? "con-confeti" : ""}`}>
         {vis.map((e) => {
           const n = puesto(e);
@@ -673,7 +682,7 @@ function Podio({ p, suena }: { p: Publico; suena: boolean }) {
             <div key={e.id} className={`peana ${ver ? "vista" : "oculta"}`} style={{ height: `${ver ? alto(n) : 22}%`, background: ver ? e.color : undefined }}>
               {ver ? (
                 <>
-                  <div className="pos">{n === 1 ? "🥇" : n === 2 ? "🥈" : n === 3 ? "🥉" : `${n}º`}</div>
+                  <div className="pos">{n}<small>º</small></div>
                   <div className="nom">{e.nombre}</div>
                   <div className="pt">{fmt(e.total)} pts</div>
                 </>

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Icono } from "../components/iconos.tsx";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { fragmento, porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
@@ -18,7 +19,7 @@ export function usePin() {
           setOk(true);
         }}
       >
-        <div className="espera"><div className="grande">🎤</div>Presentador</div>
+        <div className="espera"><div className="grande"><Icono n="micro" tam="1.2em" /></div>Presentador</div>
         {msg && <div className="error">{msg}</div>}
         <input className="campo" type="password" inputMode="numeric" placeholder="PIN" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
         <button className="btn prim grande">Entrar</button>
@@ -51,10 +52,10 @@ export function Presentador() {
   return (
     <div className="host">
       <nav className="host-nav panel">
-        <button className={!subId ? "on" : ""} onClick={() => a({ t: "ir", subId: null })}>🏠 Inicio / QR</button>
+        <button className={!subId ? "on" : ""} onClick={() => a({ t: "ir", subId: null })}><span><Icono n="inicio" /> Inicio / QR</span></button>
         {c.pruebas.map((pr) => (
           <div key={pr.id} style={{ display: "contents" }}>
-            <div className="prueba">{pr.emoji} {pr.titulo}</div>
+            <div className="prueba">{c.pruebas.indexOf(pr) + 1}. {pr.titulo}</div>
             {pr.subs.map((s) => (
               <button key={s.id} className={s.id === subId ? "on" : ""} onClick={() => a({ t: "ir", subId: s.id })}>
                 <span>{s.titulo}</span>
@@ -63,27 +64,27 @@ export function Presentador() {
             ))}
           </div>
         ))}
-        <a className="btn peq" href="/admin" style={{ marginTop: 12, textAlign: "center", textDecoration: "none" }}>✏️ Editar contenido</a>
+        <a className="btn peq" href="/admin" style={{ marginTop: 12, textAlign: "center", textDecoration: "none" }}><Icono n="lapiz" /> Editar contenido</a>
       </nav>
 
       <main className="host-main">
         <div className="host-barra panel">
           <div className="fila">
-            <span className="chip">{conectado ? "🟢" : "🔴"} Código <b>{e.codigo}</b></span>
+            <span className="chip"><span className="punto" style={{ background: conectado ? "var(--ok)" : "var(--ko)", borderRadius: "50%" }} /> Código <b>{e.codigo}</b></span>
             <span className="chip" style={h.tv && h.tvSonido === false ? { background: "#4a1020" } : undefined}>
-              📺 {!h.tv ? "TV sin conectar" : h.tvSonido === false ? "TV conectada · 🔇 sonido bloqueado" : "TV conectada"}
+              <Icono n="tv" /> {!h.tv ? "TV sin conectar" : h.tvSonido === false ? "TV conectada · sonido bloqueado" : "TV conectada"}
             </span>
             {c.equipos.map((q) => (
-              <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} />{h.conectados[q.id] ?? 0}📱</span>
+              <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} /><Icono n="telefono" /> {h.conectados[q.id] ?? 0}</span>
             ))}
           </div>
           <div className="fila">
             {(["juego", "marcador", "podio"] as const).map((v) => (
               <button key={v} className={`btn peq ${p.vista === v ? "prim" : ""}`} onClick={() => a({ t: "vista", v })}>
-                {v === "juego" ? "🎮 Juego" : v === "marcador" ? "📊 Marcador" : "🏆 Podio"}
+                <Icono n={v === "juego" ? "play" : v === "marcador" ? "marcador" : "trofeo"} /> {v === "juego" ? "Juego" : v === "marcador" ? "Marcador" : "Podio"}
               </button>
             ))}
-            <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}>↩️ Deshacer</button>
+            <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}><Icono n="deshacer" /> Deshacer</button>
           </div>
           <ControlTv h={h} a={a} recargar={() => confirm("¿Recargar la TV?") && enviar("tvRecargar", null)} />
           {p.vista === "podio" && <PodioControl h={h} a={a} />}
@@ -93,7 +94,7 @@ export function Presentador() {
         </div>
 
         {actual ? (
-          <Control h={h} sub={actual.s} titulo={`${actual.pr.emoji} ${actual.pr.titulo}`} a={a} desfase={desfase} />
+          <Control h={h} sub={actual.s} titulo={`Prueba ${c.pruebas.indexOf(actual.pr) + 1} · ${actual.pr.titulo}`} a={a} desfase={desfase} />
         ) : (
           <div className="panel col">
             <h2>Inicio</h2>
@@ -103,11 +104,11 @@ export function Presentador() {
             </p>
             {h.tv > 0 && h.tvSonido === false && (
               <div className="error">
-                🔇 La TV está abierta pero el navegador no le deja sonar. Ábrela con el lanzador «Concurso TV», o toca una vez la pantalla de la TV.
+                <Icono n="silencio" /> La TV está abierta pero el navegador no le deja sonar. Ábrela con el lanzador «Concurso TV», o toca una vez la pantalla de la TV.
               </div>
             )}
             <p className="suave">Elige una prueba en el menú o empieza por la primera.</p>
-            <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}>▶️ Ir a la primera prueba</button>
+            <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}><Icono n="play" /> Ir a la primera prueba</button>
           </div>
         )}
 
@@ -154,7 +155,7 @@ function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titul
           {sub.tipo === "manual" && <ControlManual h={h} sub={sub} a={a} desfase={desfase} />}
           <div className="fila">
             {v.fin !== null && <button className="btn peq" onClick={() => a({ t: "mas", segundos: 15 })}>+15 s</button>}
-            <button className="btn peq" onClick={() => a({ t: "resultado" })}>🏁 Terminar ya y ver resultados</button>
+            <button className="btn peq" onClick={() => a({ t: "resultado" })}><Icono n="bandera" /> Terminar ya y ver resultados</button>
           </div>
         </>
       )}
@@ -162,48 +163,48 @@ function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titul
   );
 }
 
-const Abrir = ({ a, texto = "▶️ Empezar" }: { a: A; texto?: string }) => (
+const Abrir = ({ a, texto = "Empezar" }: { a: A; texto?: string }) => (
   <button className="btn prim grande" data-principal onClick={() => a({ t: "empezar" })}>{texto}</button>
 );
 
-/** ✅ terminada, ⏳ a medias, ▶️ la actual. */
-function estadoSub(h: VistaHost, id: string): string {
+/** Terminada (check), a medias (reloj) o la actual (play). */
+function estadoSub(h: VistaHost, id: string): ReactNode {
   const e = h.estado;
   const prog = e.vivo.subId === id ? e.vivo : e.guardados?.[id];
-  if (prog?.fase === "resultado" || e.puntos[id]) return "✅";
-  if (e.vivo.subId === id) return "▶️";
-  if (prog || e.crudo[id]) return "⏳";
-  return "";
+  if (prog?.fase === "resultado" || e.puntos[id]) return <Icono n="check" titulo="Terminada" />;
+  if (e.vivo.subId === id) return <Icono n="play" titulo="En curso" />;
+  if (prog || e.crudo[id]) return <Icono n="reloj" titulo="A medias" />;
+  return null;
 }
 
 function textoFase(h: VistaHost, sub: Sub): string {
   const v = h.estado.vivo;
   const n = h.contenido.equipos.length;
-  if (v.fase === "intro") return sub.tipo === "tarjetas" || sub.tipo === "manual" ? "⏸️ Preparado" : "⏸️ Presentación en la TV";
-  if (v.fase === "resultado") return "🏁 Resultados";
-  if (v.fase === "revelar") return sub.tipo === "tarjetas" ? "⏹️ Turno terminado" : "👁️ Corregido";
+  if (v.fase === "intro") return sub.tipo === "tarjetas" || sub.tipo === "manual" ? "Preparado" : "Presentación en la TV";
+  if (v.fase === "resultado") return "Resultados";
+  if (v.fase === "revelar") return sub.tipo === "tarjetas" ? "Turno terminado" : "Corregido";
   switch (sub.tipo) {
     case "cancion":
-      return v.pulsado ? "🔔 Han pulsado: decide" : v.sonando ? "🎵 Sonando" : "⏸️ En pausa";
+      return v.pulsado ? "Han pulsado: decide" : v.sonando ? "Sonando" : "En pausa";
     case "tarjetas":
-      return "🔥 Turno en marcha";
+      return "Turno en marcha";
     case "manual":
-      return "🎬 En juego";
+      return "En juego";
     case "adivinar":
-      if (!porItem(sub)) return `⏳ Entregadas ${Object.values(v.hojas).filter((x) => x.entregada).length}/${n}`;
-      return `⏳ Esperando respuestas (${h.publico.contestados.length}/${n})`;
+      if (!porItem(sub)) return `Entregadas ${Object.values(v.hojas).filter((x) => x.entregada).length}/${n}`;
+      return `Esperando respuestas (${h.publico.contestados.length}/${n})`;
     default:
-      return `⏳ Esperando respuestas (${h.publico.contestados.length}/${n})`;
+      return `Esperando respuestas (${h.publico.contestados.length}/${n})`;
   }
 }
 
-/** Aviso si la subprueba tiene campos ✏️ sin rellenar (saldrían tal cual en la TV). */
+/** Aviso si la subprueba tiene campos con el lápiz de plantilla sin rellenar (saldrían tal cual en la TV). */
 function Pendientes({ sub }: { sub: Sub }) {
   const n = (JSON.stringify(sub).match(/✏️/g) ?? []).length;
   if (!n) return null;
   return (
     <div className="error">
-      ⚠️ Esta prueba tiene {n} campo{n > 1 ? "s" : ""} con ✏️ sin rellenar: saldrían así en la TV. <a href="/admin" style={{ color: "var(--oro)" }}>Rellenar en /admin</a>
+      <Icono n="aviso" /> Esta prueba tiene {n} campo{n > 1 ? "s" : ""} de plantilla sin rellenar (marcados con un lápiz): saldrían así en la TV. <a href="/admin" style={{ color: "var(--oro)" }}>Rellenar en /admin</a>
     </div>
   );
 }
@@ -216,8 +217,8 @@ function Retomar({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
     <div className="panel col" style={{ background: "var(--bg2)" }}>
       <b>Esta prueba ya se empezó.</b>
       <div className="fila">
-        <button className="btn prim grande" data-principal onClick={() => a({ t: "continuar" })}>▶️ Continuar {donde}</button>
-        <button className="btn ko" onClick={() => confirm("¿Empezar de cero? Se borran los resultados de esta prueba.") && a({ t: "deCero" })}>🔄 Empezar de cero</button>
+        <button className="btn prim grande" data-principal onClick={() => a({ t: "continuar" })}><Icono n="play" /> Continuar {donde}</button>
+        <button className="btn ko" onClick={() => confirm("¿Empezar de cero? Se borran los resultados de esta prueba.") && a({ t: "deCero" })}><Icono n="recargar" /> Empezar de cero</button>
       </div>
     </div>
   );
@@ -252,14 +253,14 @@ function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "t
   const rapidez = (
     <label className="fila">
       <input type="checkbox" checked={sub.rapidez} onChange={(e) => a({ t: "config", campo: "rapidez", valor: e.target.checked })} />
-      ⚡ Plus por rapidez (1º en acertar +{bonus[0] ?? 0}{bonus[1] ? `, 2º +${bonus[1]}` : ""}{bonus[2] ? `, 3º +${bonus[2]}` : ""})
+      <span><Icono n="rayo" /> Plus por rapidez (1º en acertar +{fmt(bonus[0])}{bonus[1] ? `, 2º +${fmt(bonus[1])}` : ""}{bonus[2] ? `, 3º +${fmt(bonus[2])}` : ""})</span>
     </label>
   );
   if (v.fase === "intro")
     return (
       <>
         {rapidez}
-        <Abrir a={a} texto={`▶️ Primera pregunta (${sub.preguntas.length})`} />
+        <Abrir a={a} texto={`Primera pregunta (${sub.preguntas.length})`} />
       </>
     );
   return (
@@ -269,7 +270,7 @@ function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "t
       <div className="col" style={{ gap: 6 }}>
         {q?.opciones.map((o, i) => (
           <div key={i} className={`op op${i % 4} ${i === q.correcta ? "correcta" : ""}`} style={{ padding: "8px 12px", fontSize: "1em", borderRadius: 10 }}>
-            {FORMAS[i % 4]} {o} {i === q.correcta && "✅"}
+            <b>{FORMAS[i % 4]}</b> {o} {i === q.correcta && <Icono n="check" />}
             <span style={{ marginLeft: "auto" }}>
               {h.contenido.equipos.filter((e) => v.respuestas[e.id]?.valor === i).map((e) => e.nombre).join(", ")}
             </span>
@@ -278,8 +279,8 @@ function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "t
       </div>
       <div className="suave">Han contestado: {Object.keys(v.respuestas).length}/{h.contenido.equipos.length}</div>
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Revelar</button>}
-        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.preguntas.length ? "➡️ Siguiente pregunta" : "🏁 Resultados"}</button>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Revelar</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.preguntas.length ? "Siguiente pregunta" : "Resultados"}</button>}
       </div>
     </>
   );
@@ -288,7 +289,7 @@ function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "t
 function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "precio" }>; a: A }) {
   const v = h.estado.vivo;
   const prod = sub.productos[v.indice];
-  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primer producto (${sub.productos.length})`} />;
+  if (v.fase === "intro") return <Abrir a={a} texto={`Primer producto (${sub.productos.length})`} />;
   return (
     <>
       <div className="fila">
@@ -306,9 +307,9 @@ function ControlPrecio({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: 
         </tbody>
       </table>
       <div className="fila">
-        {v.fase === "jugando" && Object.keys(v.respuestas).length >= h.contenido.equipos.length && <span className="chip" style={{ background: "var(--ok)", color: "#04210f" }}>✅ Todos han respondido</span>}
-        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Revelar precio</button>}
-        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.productos.length ? "➡️ Siguiente producto" : "🏁 Resultados"}</button>}
+        {v.fase === "jugando" && Object.keys(v.respuestas).length >= h.contenido.equipos.length && <span className="chip" style={{ background: "var(--ok)", color: "#04210f" }}><Icono n="check" /> Todos han respondido</span>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Revelar precio</button>}
+        {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.productos.length ? "Siguiente producto" : "Resultados"}</button>}
       </div>
     </>
   );
@@ -344,12 +345,12 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
 
   const celda = (eqId: string, i: number) => {
     const val = v.hojas[eqId]?.valores[i] ?? "";
-    if (!corregido(i)) return val ? `✍️ ${val}` : <span className="suave">—</span>;
+    if (!corregido(i)) return val ? <><Icono n="lapiz" /> {val}</> : <span className="suave">—</span>;
     const n = Number(corr?.[eqId]?.[i]) || 0;
     const poner = (puntos: number) => a({ t: "correccion", equipo: eqId, item: i, puntos });
     return (
       <div className="col" style={{ gap: 4 }}>
-        <span>{val.trim() ? val : <span className="suave">⚫ sin responder</span>}</span>
+        <span>{val.trim() ? val : <span className="suave">sin responder</span>}</span>
         <div className="fila" style={{ gap: 4, flexWrap: "nowrap" }}>
           <button className={`btn peq ${n === 0 ? "ko" : ""}`} onClick={() => poner(0)} aria-label="Fallo">✗</button>
           <button className={`btn peq ${n > 0 && n < 1 ? "oro" : ""}`} onClick={() => poner(0.5)} aria-label="Medio punto">½</button>
@@ -364,7 +365,7 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
     return (
       <>
         {cfg}
-        <Abrir a={a} texto={pi ? `▶️ Primera ${nombreItem} (${sub.items.length})` : "▶️ Abrir respuestas"} />
+        <Abrir a={a} texto={pi ? `Primera ${nombreItem} (${sub.items.length})` : "Abrir respuestas"} />
       </>
     );
 
@@ -376,7 +377,7 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
           <tr>
             <th>{rosco ? "Letra" : "Item"}</th>
             <th>Solución</th>
-            {h.contenido.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre}{!pi && v.hojas[e.id]?.entregada ? " ✅" : ""}</th>)}
+            {h.contenido.equipos.map((e) => <th key={e.id} style={{ color: e.color }}>{e.nombre}{!pi && v.hojas[e.id]?.entregada && <> <Icono n="check" /></>}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -399,8 +400,8 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
         {tabla}
         {v.fase === "revelar" && <div className="suave">Corrige con ✗ · ½ · ✓ o pon los puntos que quieras.</div>}
         <div className="fila">
-          {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
-          {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
+          {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Cerrar y corregir</button>}
+          {v.fase === "revelar" && <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}><Icono n="bandera" /> Resultados</button>}
         </div>
       </>
     );
@@ -425,12 +426,12 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
             ))}
           </tbody>
         </table>
-        <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Corrige con ✗ · ½ · ✓ o pon los puntos que quieras. ⚫ = no respondió."}</div>
+        <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Corrige con ✗ · ½ · ✓ o pon los puntos que quieras."}</div>
       </div>
       <div className="fila">
-        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir ya</button>}
+        {v.fase === "jugando" && <button className="btn oro grande" data-principal onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Cerrar y corregir ya</button>}
         {v.fase === "revelar" && (
-          <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.items.length ? `➡️ Siguiente ${nombreItem}` : "🏁 Resultados"}</button>
+          <button className="btn prim grande" data-principal onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.items.length ? `Siguiente ${nombreItem}` : "Resultados"}</button>
         )}
       </div>
       <details>
@@ -449,7 +450,7 @@ function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo:
     return (
       <>
         {frag}
-        <Abrir a={a} texto={`▶️ Primera canción (${sub.canciones.length})`} />
+        <Abrir a={a} texto={`Primera canción (${sub.canciones.length})`} />
       </>
     );
   const pulsado = equipoDe(h.publico, v.pulsado);
@@ -459,25 +460,25 @@ function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo:
       <div className="fila">
         <span className="secreto">{c?.titulo}</span>
         <span className="suave">— {c?.artista}</span>
-        {!c?.audio && <span className="chip">⚠️ sin MP3: ponla tú</span>}
+        {!c?.audio && <span className="chip"><Icono n="aviso" /> sin MP3: ponla tú</span>}
       </div>
       <div className="fila">
-        <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "⏸️ Pausa" : "▶️ Seguir"}</button>
-        <button className="btn" onClick={() => a({ t: "repetir" })}>🔁 Repetir fragmento</button>
+        <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "Pausa" : "Seguir"}</button>
+        <button className="btn" onClick={() => a({ t: "repetir" })}><Icono n="recargar" /> Repetir fragmento</button>
         {v.bloqueados.length > 0 && <span className="suave">Fallaron: {v.bloqueados.map((id) => equipoDe(h.publico, id)?.nombre).join(", ")}</span>}
       </div>
       {v.fase === "jugando" && pulsado && (
         <div className="panel col" style={{ borderColor: pulsado.color }}>
-          <b style={{ fontSize: "1.4em", color: pulsado.color }}>🔔 Ha pulsado {pulsado.nombre}</b>
+          <b style={{ fontSize: "1.4em", color: pulsado.color }}><Icono n="bocina" /> Ha pulsado {pulsado.nombre}</b>
           <div className="fila">
-            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}>✅ Acierto</button>
-            <button className="btn ko grande" onClick={() => a({ t: "fallo" })}>❌ Fallo (rebote)</button>
+            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}><Icono n="check" /> Acierto</button>
+            <button className="btn ko grande" onClick={() => a({ t: "fallo" })}><Icono n="cruz" /> Fallo (rebote)</button>
           </div>
         </div>
       )}
       <div className="fila">
-        {v.fase === "jugando" && !pulsado && <button className="btn oro" onClick={() => a({ t: "revelar" })}>👁️ Nadie la sabe: revelar</button>}
-        <button className="btn prim grande" data-principal={v.fase === "revelar" ? "" : undefined} onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "➡️ Siguiente canción" : "🏁 Resultados"}</button>
+        {v.fase === "jugando" && !pulsado && <button className="btn oro" onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Nadie la sabe: revelar</button>}
+        <button className="btn prim grande" data-principal={v.fase === "revelar" ? "" : undefined} onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "Siguiente canción" : "Resultados"}</button>
       </div>
       <Crudos h={h} sub={sub} a={a} />
     </>
@@ -505,20 +506,20 @@ function ControlTarjetas({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
         </label>
       </div>
       <Segundos valor={sub.segundos} etiqueta="Tiempo por turno" campo="segundos" a={a} jugando={v.fase === "jugando"} />
-      {turno && v.fase === "intro" && <Abrir a={a} texto={`▶️ Empezar turno de ${turno.nombre} (${sub.segundos} s)`} />}
+      {turno && v.fase === "intro" && <Abrir a={a} texto={`Empezar turno de ${turno.nombre} (${sub.segundos} s)`} />}
       {turno && v.fase === "jugando" && (
         <>
           {t && (
             <div className="tarjeta-host">
               <div className="pal">{t.palabra}</div>
               {t.condicion && <div style={{ marginTop: 6, fontWeight: 700 }}>{t.condicion}</div>}
-              {t.prohibidas && <div className="proh">{t.prohibidas.filter(Boolean).map((x) => <span key={x}>🚫 {x}</span>)}</div>}
+              {t.prohibidas && <div className="proh">{t.prohibidas.filter(Boolean).map((x) => <span key={x}>{x}</span>)}</div>}
             </div>
           )}
           <div className="fila">
-            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}>✅ Acierto</button>
-            <button className="btn ko grande" onClick={() => a({ t: "pasar" })}>{sub.modo === "palabra" ? "🚫 Tabú / pasar" : "⏭️ Pasar"}</button>
-            <button className="btn" onClick={() => a({ t: "revelar" })}>⏹️ Fin del turno</button>
+            <button className="btn ok grande" onClick={() => a({ t: "acierto" })}><Icono n="check" /> Acierto</button>
+            <button className="btn ko grande" onClick={() => a({ t: "pasar" })}><Icono n="siguiente" /> {sub.modo === "palabra" ? "Tabú / pasar" : "Pasar"}</button>
+            <button className="btn" onClick={() => a({ t: "revelar" })}><Icono n="bandera" /> Fin del turno</button>
           </div>
         </>
       )}
@@ -538,7 +539,7 @@ function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub,
   return (
     <>
       <Segundos valor={sub.segundos ?? 0} etiqueta="Cuenta atrás en la TV" campo="segundos" a={a} jugando={v.fase === "jugando"} />
-      {(sub.segundos ?? 0) > 0 && <Abrir a={a} texto={v.fase === "jugando" ? `🔄 Reiniciar cuenta atrás (${sub.segundos} s)` : `▶️ Empezar cuenta atrás (${sub.segundos} s)`} />}
+      {(sub.segundos ?? 0) > 0 && <Abrir a={a} texto={v.fase === "jugando" ? `Reiniciar cuenta atrás (${sub.segundos} s)` : `Empezar cuenta atrás (${sub.segundos} s)`} />}
       <div className="fila">
         <SiguienteEquipo h={h} sub={sub} a={a} />
         <span className="suave">Turno (opcional):</span>
@@ -551,13 +552,13 @@ function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub,
         <div className="panel col">
           <Crono c={v.cronometro} desfase={desfase} className="secreto" />
           <div className="fila">
-            {v.cronometro.desde === null ? <button className="btn prim" onClick={() => a({ t: "crono", op: "start" })}>▶️ Cronómetro</button> : <button className="btn" onClick={() => a({ t: "crono", op: "stop" })}>⏸️ Parar</button>}
-            <button className="btn" onClick={() => a({ t: "crono", op: "reset" })}>🔄 A cero</button>
+            {v.cronometro.desde === null ? <button className="btn prim" onClick={() => a({ t: "crono", op: "start" })}><Icono n="play" /> Cronómetro</button> : <button className="btn" onClick={() => a({ t: "crono", op: "stop" })}><Icono n="pausa" /> Parar</button>}
+            <button className="btn" onClick={() => a({ t: "crono", op: "reset" })}><Icono n="recargar" /> A cero</button>
           </div>
           <div className="fila">
             <span className="suave">Guardar tiempo de:</span>
             {h.contenido.equipos.map((e) => (
-              <button key={e.id} className="btn peq" style={{ borderColor: e.color }} onClick={() => a({ t: "crono", op: "guardar", equipo: e.id })}>⏱️ {e.nombre}</button>
+              <button key={e.id} className="btn peq" style={{ borderColor: e.color }} onClick={() => a({ t: "crono", op: "guardar", equipo: e.id })}><Icono n="reloj" /> {e.nombre}</button>
             ))}
           </div>
         </div>
@@ -653,12 +654,12 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
       <div className="fila">
         {editando ? (
           <>
-            <button className="btn ok" onClick={() => { a({ t: "confirmar", puntos }); setEditando(false); }}>💾 Fijar estos puntos</button>
+            <button className="btn ok" onClick={() => { a({ t: "confirmar", puntos }); setEditando(false); }}><Icono n="check" /> Fijar estos puntos</button>
             <button className="btn peq" onClick={() => setEditando(false)}>Cancelar</button>
           </>
         ) : (
           <>
-            <span className="chip">{fijados ? "✏️ Puntos fijados a mano" : "⚡ Puntos automáticos, ya en el marcador"}</span>
+            <span className="chip"><Icono n={fijados ? "lapiz" : "rayo"} /> {fijados ? "Puntos fijados a mano" : "Puntos automáticos, ya en el marcador"}</span>
             <button className="btn peq" onClick={() => setEditando(true)}>Cambiar a mano</button>
             {fijados && <button className="btn peq" onClick={() => a({ t: "desconfirmar" })}>Volver a automático</button>}
           </>
@@ -667,9 +668,9 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
       <div className="suave">Los puntos suman al marcador solos. Si corriges un resultado, se recalculan (salvo que los fijes a mano).</div>
       <div className="fila">
         <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}>
-          {siguienteTitulo(h, sub.id) ? `➡️ Siguiente prueba: ${siguienteTitulo(h, sub.id)}` : "🏆 Fin: ir al inicio"}
+          {siguienteTitulo(h, sub.id) ? `Siguiente prueba: ${siguienteTitulo(h, sub.id)}` : "Fin: ir al inicio"}
         </button>
-        <button className="btn" onClick={() => a({ t: "vista", v: "marcador" })}>📊 Enseñar marcador</button>
+        <button className="btn" onClick={() => a({ t: "vista", v: "marcador" })}><Icono n="marcador" /> Enseñar marcador</button>
       </div>
     </>
   );
@@ -683,7 +684,7 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
   return (
     <div className="fila" style={{ width: "100%" }}>
       <button className="btn peq" onClick={() => a({ t: "tv", mudo: !tv.mudo })} aria-label={tv.mudo ? "Activar sonido de la TV" : "Silenciar la TV"}>
-        {tv.mudo ? "🔇 TV en silencio" : "🔊 Sonido TV"}
+        <Icono n={tv.mudo ? "silencio" : "sonido"} /> {tv.mudo ? "TV en silencio" : "Sonido TV"}
       </button>
       <input
         type="range"
@@ -698,7 +699,7 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
         style={{ width: 140 }}
       />
       <span className="suave">{vol}%</span>
-      <button className="btn peq" onClick={recargar}>🔄 Recargar TV</button>
+      <button className="btn peq" onClick={recargar}><Icono n="recargar" /> Recargar TV</button>
     </div>
   );
 }
@@ -707,13 +708,13 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
 function PodioControl({ h, a }: { h: VistaHost; a: A }) {
   const grupos = gruposPodio(h.publico.equipos);
   const paso = h.publico.podioPaso;
-  if (paso >= grupos.length) return <div className="chip" style={{ width: "100%" }}>🏆 Ganador revelado. <button className="btn peq" onClick={() => a({ t: "vista", v: "podio" })}>Repetir el final</button></div>;
+  if (paso >= grupos.length) return <div className="chip" style={{ width: "100%" }}><Icono n="trofeo" /> Ganador revelado. <button className="btn peq" onClick={() => a({ t: "vista", v: "podio" })}>Repetir el final</button></div>;
   const sig = grupos[paso];
   const empate = sig.ids.length > 1 ? ` (empate de ${sig.ids.length})` : "";
   return (
     <div className="fila" style={{ width: "100%" }}>
       <button className="btn oro grande" data-principal onClick={() => a({ t: "podioPaso" })}>
-        {paso === grupos.length - 1 ? `🥁 ¡Revelar al GANADOR!${empate}` : `🥁 Revelar el ${sig.puesto}º puesto${empate}`}
+        {paso === grupos.length - 1 ? `¡Revelar al GANADOR!${empate}` : `Revelar el ${sig.puesto}º puesto${empate}`}
       </button>
     </div>
   );
@@ -728,10 +729,10 @@ function siguienteTitulo(h: VistaHost, id: string): string | null {
 function SiguienteEquipo({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
   const jugados = Object.keys(h.estado.crudo[sub.id] ?? {});
   const faltan = h.contenido.equipos.filter((e) => !jugados.includes(e.id) && e.id !== h.estado.vivo.turno);
-  if (!faltan.length) return <span className="chip">✅ Han jugado todos</span>;
+  if (!faltan.length) return <span className="chip"><Icono n="check" /> Han jugado todos</span>;
   return (
     <button className="btn" onClick={() => a({ t: "siguienteTurno" })}>
-      ⏭️ Siguiente equipo ({faltan.map((e) => e.nombre).join(", ")})
+      <Icono n="siguiente" /> Siguiente equipo ({faltan.map((e) => e.nombre).join(", ")})
     </button>
   );
 }
@@ -754,7 +755,7 @@ function Marcador({ h, a }: { h: VistaHost; a: A }) {
           <tbody>
             {h.publico.desglose.map((f) => (
               <tr key={f.pruebaId}>
-                <td>{f.emoji} {f.titulo}</td>
+                <td>{f.titulo}</td>
                 {h.publico.equipos.map((e) => <td key={e.id}>{fmt(f.puntos[e.id])}</td>)}
               </tr>
             ))}
@@ -798,9 +799,9 @@ function Peligro({ a }: { a: A }) {
     <details className="panel">
       <summary className="suave">Opciones avanzadas</summary>
       <div className="fila" style={{ marginTop: 10 }}>
-        <button className="btn peq" onClick={() => confirm("¿Borrar los resultados de esta prueba?") && a({ t: "limpiarSub" })}>🧹 Repetir esta prueba desde cero</button>
-        <button className="btn peq" onClick={() => confirm("¿Nuevo código? Los móviles tendrán que volver a entrar.") && a({ t: "codigo" })}>🔑 Nuevo código</button>
-        <button className="btn peq ko" onClick={() => confirm("¿Borrar TODA la partida (puntos incluidos)?") && a({ t: "reiniciar" })}>💣 Reiniciar partida</button>
+        <button className="btn peq" onClick={() => confirm("¿Borrar los resultados de esta prueba?") && a({ t: "limpiarSub" })}><Icono n="basura" /> Repetir esta prueba desde cero</button>
+        <button className="btn peq" onClick={() => confirm("¿Nuevo código? Los móviles tendrán que volver a entrar.") && a({ t: "codigo" })}><Icono n="candado" /> Nuevo código</button>
+        <button className="btn peq ko" onClick={() => confirm("¿Borrar TODA la partida (puntos incluidos)?") && a({ t: "reiniciar" })}><Icono n="basura" /> Reiniciar partida</button>
       </div>
     </details>
   );

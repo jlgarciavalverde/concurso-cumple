@@ -44,14 +44,14 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByPlaceholder("PIN").fill("1234");
   await host.getByRole("button", { name: "Entrar" }).click();
   await expect(host.getByText(`Código ${codigo}`)).toBeVisible();
-  await expect(host.getByText(/^📺 TV conectada/)).toBeVisible();
+  await expect(host.getByText(/TV conectada/)).toBeVisible();
   // sonido y recarga de la TV desde el presentador
   await host.getByRole("button", { name: "Silenciar la TV" }).click();
   await expect(host.getByRole("button", { name: "Activar sonido de la TV" })).toBeVisible();
   await host.getByRole("button", { name: "Activar sonido de la TV" }).click();
   host.once("dialog", (d) => d.accept());
   const recarga = tv.waitForEvent("load");
-  await host.getByRole("button", { name: "🔄 Recargar TV" }).click();
+  await host.getByRole("button", { name: "Recargar TV" }).click();
   await recarga;
   await expect(tv.locator(".unete b")).toHaveText(codigo);
 
@@ -70,7 +70,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
     ["Rojo", "Azul", "Verde", "Amarillo"].map((e) => movil(browser, codigo, e, e === "Amarillo" ? "Los Cachimberos" : undefined)),
   );
   await expect(tv.locator(".tv-pie")).toContainText("Los Cachimberos");
-  await expect(tv.getByText("✅ 1 móvil").first()).toBeVisible();
+  await expect(tv.getByText("1 móvil").first()).toBeVisible();
   await foto(tv, "tv-lobby");
   await foto(rojo, "movil-espera");
 
@@ -79,6 +79,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByRole("button", { name: /Primera pregunta/ }).click();
   await expect(tv.locator(".tv-pregunta")).toContainText("planeta más grande");
   await foto(tv, "tv-pregunta");
+  await foto(tv, "tv-intro-o-pregunta");
   if (FOTOS) {
     await host.setViewportSize({ width: 390, height: 844 });
     await foto(host, "host-movil");
@@ -132,7 +133,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(verde.locator(".pulsador")).toHaveText("Bloqueados");
   await azul.locator(".pulsador").dispatchEvent("pointerdown");
   await expect(tv.locator(".pulsado")).toHaveText("Azul");
-  await host.getByRole("button", { name: "✅ Acierto" }).click();
+  await host.getByRole("button", { name: "Acierto", exact: true }).click();
   await expect(tv.locator(".revela")).toContainText("Mazas y catapultas");
 
   // --- Rosco letra a letra
@@ -189,14 +190,14 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByRole("button", { name: /^Rojo/ }).click();
   await host.getByRole("button", { name: /Empezar turno/ }).click();
   await expect(host.locator(".tarjeta-host")).toBeVisible();
-  const palabra = await host.locator(".tarjeta-host .pal").innerText();
-  await expect(tv.locator(".tarjeta-tv .pal")).toHaveText(palabra); // en la TV, para quien explica
-  await expect(rojo.getByText(palabra, { exact: true })).toHaveCount(0); // nunca en los móviles
+  const palabra = (await host.locator(".tarjeta-host .pal").textContent()) ?? "";
+  await expect(tv.locator(".tarjeta-tv .pal")).toHaveText(palabra, { ignoreCase: true }); // en la TV, para quien explica
+  await expect(rojo.getByText(new RegExp(palabra, "i"))).toHaveCount(0); // nunca en los móviles
   await host.getByText("Mostrar la tarjeta en la TV").click();
   await expect(tv.locator(".tarjeta-tv")).toHaveCount(0);
   await host.getByText("Mostrar la tarjeta en la TV").click();
-  await host.getByRole("button", { name: "✅ Acierto" }).click();
-  await expect(tv.locator(".revela")).toContainText("1 aciertos");
+  await host.getByRole("button", { name: "Acierto", exact: true }).click();
+  await expect(tv.locator(".revela")).toContainText("1 acierto");
   await foto(host, "host-tarjeta");
   await foto(tv, "tv-tarjeta");
 
@@ -211,10 +212,10 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await foto(tv, "tv-torre");
 
   // --- Marcador y podio
-  await host.getByRole("button", { name: "📊 Marcador" }).click();
+  await host.getByRole("button", { name: "Marcador", exact: true }).click();
   await expect(tv.locator(".desglose")).toBeVisible();
   await foto(tv, "tv-marcador");
-  await host.getByRole("button", { name: "🏆 Podio" }).click();
+  await host.getByRole("button", { name: "Podio", exact: true }).click();
   await expect(tv.locator(".podio")).toBeVisible();
   await expect(tv.getByText("¿Quién ganará?")).toBeVisible();
   await expect(tv.locator(".peana.vista")).toHaveCount(0);
@@ -246,8 +247,8 @@ test("admin: PIN, edición y guardado", async ({ page }) => {
   await expect(page.getByText(/Quedan \d+ campos/)).toBeVisible();
   await page.getByText("¿Cuánto cuesta?").click();
   await page.locator('details[open] input[value="✏️ Producto 1"]').fill("Cachimba Kaloud");
-  await page.getByRole("button", { name: "💾 Guardar" }).click();
-  await expect(page.getByText("Guardado ✅")).toBeVisible();
+  await page.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByText("Guardado", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByText("¿Cuánto cuesta?").click();
   await expect(page.locator('details[open] input[value="Cachimba Kaloud"]')).toHaveCount(1);

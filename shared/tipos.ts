@@ -149,6 +149,7 @@ export interface Publico {
     titulo: string;
     descripcion?: string;
     pruebaTitulo: string;
+    pruebaNum: number; // 1, 2, 3… (la TV numera las pruebas en lugar de emojis)
     emoji: string;
     total: number; // nº de preguntas/canciones/…
     puntuacion?: "ranking" | "aciertos";
