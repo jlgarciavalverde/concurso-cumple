@@ -71,7 +71,7 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .error { background: #4a1020; border: 1px solid var(--ko); padding: 10px 14px; border-radius: 10px; }
 
 /* ---------- TV ---------- */
-.tv { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 2.2vh 3vw; gap: 2vh; overflow: hidden; font-size: 2.2vh; }
+.tv { cursor: none; height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 2.2vh 3vw; gap: 2vh; overflow: hidden; font-size: 2.2vh; }
 .tv-cab { display: flex; justify-content: space-between; align-items: center; }
 .tv-cab .marca { font-size: 2.6vh; font-weight: 800; letter-spacing: 0.02em; }
 .tv-cab .unete { font-size: 2.2vh; color: var(--suave); }
@@ -227,3 +227,4 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .clasif-pts { font-size: 5vh; text-align: right; font-variant-numeric: tabular-nums; }
 .clasif-delta { font-size: 3vh; }
 .clasif-delta .mas { color: var(--oro); animation: pop 0.5s; }
+.sin-sonido { color: var(--suave); font-size: 1.8vh; }

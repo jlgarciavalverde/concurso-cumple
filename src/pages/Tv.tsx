@@ -2,20 +2,45 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Marca, Publico } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
-import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, gruposPodio, posRosco, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
-import { guardado, useCanal } from "../socket.ts";
+import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, gruposPodio, ponerVolumen, posRosco, probarSonido, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
+import { useCanal } from "../socket.ts";
 
 const AUTH = { rol: "tv" };
 
 export function Tv() {
-  const { datos: p, desfase, conectado } = useCanal<Publico>(AUTH, "publico");
-  const [activa, setActiva] = useState(false);
-  const [mudo, setMudo] = useState(guardado.leer("tv-mudo") === "1");
+  const { datos: p, desfase, conectado, enviar } = useCanal<Publico>(AUTH, "publico", { recargar: () => location.reload() });
+  // La TV no se toca: el sonido funciona si el navegador lo permite (lanzador «Concurso TV») y lo controla el presentador
+  const [sonidoOk, setSonidoOk] = useState(false);
   const [progreso, setProgreso] = useState<Progreso>(null);
   const pulsadoPrev = useRef<string | null>(null);
-  const suena = activa && !mudo;
+  const mudo = p?.tv.mudo ?? false;
+  const suena = sonidoOk && !mudo;
 
-  useWakeLock(activa);
+  useEffect(() => {
+    let vivo = true;
+    const probar = () => probarSonido().then((ok) => vivo && setSonidoOk(ok));
+    probar();
+    // Plan B: si el navegador bloquea el sonido, cualquier toque o tecla en la TV lo desbloquea
+    const desbloquear = () => {
+      desbloquearAudio();
+      probar();
+    };
+    addEventListener("pointerdown", desbloquear);
+    addEventListener("keydown", desbloquear);
+    return () => {
+      vivo = false;
+      removeEventListener("pointerdown", desbloquear);
+      removeEventListener("keydown", desbloquear);
+    };
+  }, []);
+  useEffect(() => {
+    if (conectado) enviar("tvEstado", { sonido: sonidoOk });
+  }, [conectado, sonidoOk]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    ponerVolumen((p?.tv.volumen ?? 80) / 100);
+  }, [p?.tv.volumen]);
+
+  useWakeLock(true);
   useSonidosCuenta(p?.fase === "jugando" ? p.fin : null, desfase, suena);
   useEffect(() => {
     if (suena && p?.pulsado && p.pulsado !== pulsadoPrev.current) sonidos.pulsador();
@@ -36,17 +61,7 @@ export function Tv() {
         <div className="marca">🎉 {p.titulo}</div>
         <div className="unete">
           {location.host} · código <b>{p.codigo}</b> {!conectado && <span style={{ color: "var(--ko)" }}>· sin conexión</span>}
-          <button
-            className="btn peq"
-            style={{ marginLeft: "1vw", background: "transparent" }}
-            aria-label={mudo ? "Activar sonidos" : "Silenciar sonidos"}
-            onClick={() => {
-              guardado.poner("tv-mudo", mudo ? "0" : "1");
-              setMudo(!mudo);
-            }}
-          >
-            {mudo ? "🔇" : "🔊"}
-          </button>
+          {!sonidoOk && <span className="sin-sonido"> · 🔇 sin sonido</span>}
         </div>
       </div>
       <div className="tv-centro">
@@ -62,22 +77,8 @@ export function Tv() {
           ))}
         </div>
       )}
-      <AudioTv p={p} activa={activa} onProgreso={setProgreso} />
-      <Precarga urls={activa ? p.audiosSub : undefined} />
-      {!activa && (
-        <div className="activar">
-          <button
-            className="btn prim grande"
-            onClick={() => {
-              desbloquearAudio();
-              document.documentElement.requestFullscreen?.().catch(() => {});
-              setActiva(true);
-            }}
-          >
-            📺 Activar pantalla y sonido
-          </button>
-        </div>
-      )}
+      <AudioTv p={p} activa={sonidoOk} onProgreso={setProgreso} />
+      <Precarga urls={p.audiosSub} />
     </div>
   );
 }
@@ -124,11 +125,12 @@ function AudioTv({ p, activa, onProgreso }: { p: Publico; activa: boolean; onPro
   useEffect(() => {
     const a = ref.current;
     if (!a || !src || !au) return;
+    a.volume = p.tv.mudo ? 0 : p.tv.volumen / 100;
     if (activa && p.sonando) {
       if (fin !== null && !libre.current && a.currentTime >= fin - 0.05) return; // fragmento ya agotado: hace falta «Repetir»
       a.play().catch(() => {});
     } else a.pause();
-  }, [clave, p.sonando, activa, p.repetir, p.fase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clave, p.sonando, activa, p.repetir, p.fase, p.tv.mudo, p.tv.volumen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <audio

@@ -32,7 +32,8 @@ export type AccionHost =
   | { t: "siguienteTurno" }
   | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez" | "fragmento"; valor: number | boolean }
   | { t: "podioPaso" }
-  | { t: "repetir" };
+  | { t: "repetir" }
+  | { t: "tv"; mudo?: boolean; volumen?: number };
 
 export type AccionEquipo =
   | { t: "responder"; valor: number }
@@ -263,6 +264,13 @@ export class Juego {
         if (["juego", "marcador", "podio"].includes(acc.v)) v.vista = acc.v;
         if (acc.v === "podio") v.podioPaso = 0; // el final se revela por pasos
         return;
+      case "tv": {
+        const tv = (e.tv ??= { mudo: false, volumen: 80 });
+        if (typeof acc.mudo === "boolean") tv.mudo = acc.mudo;
+        if (Number.isFinite(acc.volumen)) tv.volumen = Math.max(0, Math.min(100, Math.round(acc.volumen!)));
+        this.pila.pop(); // el sonido no es un paso de la partida: no se deshace
+        return;
+      }
       case "podioPaso":
         v.podioPaso = Math.min((v.podioPaso ?? 0) + 1, this.pasosPodio());
         return;
@@ -546,6 +554,7 @@ export class Juego {
       cronometro: v.cronometro,
       podioPaso: v.podioPaso ?? 0,
       repetir: v.repetir ?? 0,
+      tv: e.tv ?? { mudo: false, volumen: 80 },
       crudo: {},
       confirmado: false,
       desglose: desglose(this.contenido, e),

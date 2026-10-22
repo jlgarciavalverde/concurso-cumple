@@ -64,6 +64,9 @@ export function posRosco(i: number, n: number) {
 }
 
 let ctx: AudioContext | null = null;
+let volumen = 0.8;
+/** Volumen de los efectos (0–1); lo fija el presentador. */
+export const ponerVolumen = (v: number) => (volumen = Math.max(0, Math.min(1, v)));
 /** Pitido sintético (pulsador, fin de tiempo) sin archivos. */
 export function pitido(freq = 880, dur = 0.18, tipo: OscillatorType = "square") {
   try {
@@ -72,7 +75,8 @@ export function pitido(freq = 880, dur = 0.18, tipo: OscillatorType = "square") 
     const g = ctx.createGain();
     o.type = tipo;
     o.frequency.value = freq;
-    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    if (volumen <= 0) return;
+    g.gain.setValueAtTime(0.15 * volumen, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     o.connect(g).connect(ctx.destination);
     o.start();
@@ -169,3 +173,19 @@ Object.assign(sonidos, {
     for (const [f, t, d] of notas) setTimeout(() => pitido(f, d, "square"), t);
   },
 });
+
+// 0,1 s de silencio en WAV: sirve para preguntar al navegador si deja sonar sin que nadie toque la pantalla
+const SILENCIO = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+
+/** ¿Puede sonar la página sin un toque del usuario? (Chrome abierto con el lanzador: sí). */
+export async function probarSonido(): Promise<boolean> {
+  try {
+    ctx ??= new AudioContext();
+    await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 300))]);
+    const a = new Audio(SILENCIO);
+    await a.play();
+    return ctx.state === "running";
+  } catch {
+    return false;
+  }
+}

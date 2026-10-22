@@ -33,7 +33,9 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   const tvCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const tv = await tvCtx.newPage();
   await tv.goto("/tv");
-  await tv.getByRole("button", { name: /Activar pantalla/ }).click();
+  // La TV no tiene nada que tocar
+  await expect(tv.locator(".tv-cab")).toBeVisible();
+  await expect(tv.getByRole("button")).toHaveCount(0);
   const codigo = (await tv.locator(".unete b").innerText()).trim();
   expect(codigo).toMatch(/^[A-Z]{4}$/);
 
@@ -42,6 +44,16 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await host.getByPlaceholder("PIN").fill("1234");
   await host.getByRole("button", { name: "Entrar" }).click();
   await expect(host.getByText(`Código ${codigo}`)).toBeVisible();
+  await expect(host.getByText(/^📺 TV conectada/)).toBeVisible();
+  // sonido y recarga de la TV desde el presentador
+  await host.getByRole("button", { name: "Silenciar la TV" }).click();
+  await expect(host.getByRole("button", { name: "Activar sonido de la TV" })).toBeVisible();
+  await host.getByRole("button", { name: "Activar sonido de la TV" }).click();
+  host.once("dialog", (d) => d.accept());
+  const recarga = tv.waitForEvent("load");
+  await host.getByRole("button", { name: "🔄 Recargar TV" }).click();
+  await recarga;
+  await expect(tv.locator(".unete b")).toHaveText(codigo);
 
   // Antes de empezar: la primera canción del rap con un audio de 3 s y fragmento de 1 s
   const h = { "x-pin": "1234" };

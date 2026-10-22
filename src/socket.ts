@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 
 /** Conexión en tiempo real. `desfase` = reloj del servidor − reloj local (para las cuentas atrás). */
-export function useCanal<T extends { ahora: number }>(auth: Record<string, string> | null, evento: string) {
+export function useCanal<T extends { ahora: number }>(auth: Record<string, string> | null, evento: string, otros?: Record<string, () => void>) {
   const [datos, setDatos] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conectado, setConectado] = useState(false);
@@ -18,6 +18,7 @@ export function useCanal<T extends { ahora: number }>(auth: Record<string, strin
     s.on("connect", () => setConectado(true));
     s.on("disconnect", () => setConectado(false));
     s.on("error", (e: string) => setError(e));
+    for (const [ev, fn] of Object.entries(otros ?? {})) s.on(ev, fn);
     s.on(evento, (d: T) => {
       setDesfase(d.ahora - Date.now());
       setDatos(d);

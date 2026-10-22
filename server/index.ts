@@ -141,6 +141,8 @@ function conectados(): Record<EquipoId, number> {
   return out;
 }
 
+const sonidoTv = new Map<string, boolean>();
+
 let temporizador: NodeJS.Timeout | null = null;
 function programarTic() {
   if (temporizador) clearTimeout(temporizador);
@@ -167,6 +169,7 @@ function emitir() {
     publico: pub,
     conectados: con,
     tv: io.sockets.adapter.rooms.get("tv")?.size ?? 0,
+    tvSonido: sonidoTv.size ? [...sonidoTv.values()].some(Boolean) : null,
     deshacer: juego.puedeDeshacer,
   });
   // Equipos sin elegir (pantalla de entrada): solo la lista de equipos
@@ -185,6 +188,7 @@ io.on("connection", (socket) => {
       return;
     }
     socket.join("host");
+    socket.on("tvRecargar", () => io.to("tv").emit("recargar"));
     socket.on("host", (acc: AccionHost) => {
       try {
         juego.host(acc);
@@ -201,6 +205,12 @@ io.on("connection", (socket) => {
     });
   } else if (auth.rol === "tv") {
     socket.join("tv");
+    // La TV no se toca: cuenta si el navegador le deja sonar para que el presentador lo vea
+    socket.on("tvEstado", (d: { sonido?: boolean }) => {
+      sonidoTv.set(socket.id, !!d?.sonido);
+      emitir();
+    });
+    socket.on("disconnect", () => sonidoTv.delete(socket.id));
   } else if (auth.rol === "equipo") {
     const codigo = String(auth.codigo ?? "").toUpperCase();
     const eq = String(auth.equipo ?? "");

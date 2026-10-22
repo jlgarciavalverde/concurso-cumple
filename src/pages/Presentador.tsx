@@ -70,7 +70,9 @@ export function Presentador() {
         <div className="host-barra panel">
           <div className="fila">
             <span className="chip">{conectado ? "🟢" : "🔴"} Código <b>{e.codigo}</b></span>
-            <span className="chip">📺 {h.tv ? "TV conectada" : "TV sin conectar"}</span>
+            <span className="chip" style={h.tv && h.tvSonido === false ? { background: "#4a1020" } : undefined}>
+              📺 {!h.tv ? "TV sin conectar" : h.tvSonido === false ? "TV conectada · 🔇 sonido bloqueado" : "TV conectada"}
+            </span>
             {c.equipos.map((q) => (
               <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} />{h.conectados[q.id] ?? 0}📱</span>
             ))}
@@ -83,6 +85,7 @@ export function Presentador() {
             ))}
             <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}>↩️ Deshacer</button>
           </div>
+          <ControlTv h={h} a={a} recargar={() => confirm("¿Recargar la TV?") && enviar("tvRecargar", null)} />
           {p.vista === "podio" && <PodioControl h={h} a={a} />}
           <div className="atajos suave">
             Atajos: <kbd>Espacio</kbd> siguiente paso · <kbd>Z</kbd> deshacer · <kbd>J</kbd> juego · <kbd>M</kbd> marcador · <kbd>P</kbd> podio
@@ -94,7 +97,15 @@ export function Presentador() {
         ) : (
           <div className="panel col">
             <h2>Inicio</h2>
-            <p className="suave">La TV muestra el QR para que cada equipo entre con su móvil. Abre la TV en <b>{location.host}/tv</b> y pulsa «Activar pantalla y sonido».</p>
+            <p className="suave">
+              La TV muestra el QR para que cada equipo entre con su móvil. En el portátil de la TV abre <b>«Concurso TV»</b> (en el Escritorio): se abre a
+              pantalla completa y con sonido sin tocar nada. Todo se maneja desde aquí.
+            </p>
+            {h.tv > 0 && h.tvSonido === false && (
+              <div className="error">
+                🔇 La TV está abierta pero el navegador no le deja sonar. Ábrela con el lanzador «Concurso TV», o toca una vez la pantalla de la TV.
+              </div>
+            )}
             <p className="suave">Elige una prueba en el menú o empieza por la primera.</p>
             <button className="btn prim grande" data-principal onClick={() => a({ t: "siguientePrueba" })}>▶️ Ir a la primera prueba</button>
           </div>
@@ -661,6 +672,34 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
         <button className="btn" onClick={() => a({ t: "vista", v: "marcador" })}>📊 Enseñar marcador</button>
       </div>
     </>
+  );
+}
+
+/** Sonido de la TV (la TV no se toca: todo desde aquí). */
+function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => void }) {
+  const tv = h.publico.tv;
+  const [vol, setVol] = useState(tv.volumen);
+  useEffect(() => setVol(tv.volumen), [tv.volumen]);
+  return (
+    <div className="fila" style={{ width: "100%" }}>
+      <button className="btn peq" onClick={() => a({ t: "tv", mudo: !tv.mudo })} aria-label={tv.mudo ? "Activar sonido de la TV" : "Silenciar la TV"}>
+        {tv.mudo ? "🔇 TV en silencio" : "🔊 Sonido TV"}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={vol}
+        aria-label="Volumen de la TV"
+        onChange={(e) => setVol(Number(e.target.value))}
+        onPointerUp={() => a({ t: "tv", volumen: vol })}
+        onKeyUp={() => a({ t: "tv", volumen: vol })}
+        style={{ width: 140 }}
+      />
+      <span className="suave">{vol}%</span>
+      <button className="btn peq" onClick={recargar}>🔄 Recargar TV</button>
+    </div>
   );
 }
 

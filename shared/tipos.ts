@@ -133,6 +133,7 @@ export interface Estado {
   ajustes: Ajuste[];
   tarjetasUsadas: Record<string, number[]>;
   guardados?: Record<string, Vivo>; // cómo se dejó cada subprueba al salir de ella (para continuar)
+  tv?: { mudo: boolean; volumen: number }; // sonido de la TV, lo controla el presentador
 }
 
 // Lo que reciben TV y móviles (sin soluciones antes de tiempo)
@@ -177,6 +178,7 @@ export interface Publico {
   audiosSub?: string[]; // para precargar los MP3 de la ronda
   podioPaso: number;
   repetir: number;
+  tv: { mudo: boolean; volumen: number };
   turno: EquipoId | null;
   condicion?: string;
   tarjeta?: Tarjeta; // solo TV y presentador, nunca a los móviles
@@ -200,6 +202,7 @@ export interface VistaHost {
   publico: Publico;
   conectados: Record<EquipoId, number>;
   tv: number;
+  tvSonido: boolean | null; // ¿la TV puede sonar? (null: no lo ha dicho / sin TV)
   deshacer: number;
 }
 

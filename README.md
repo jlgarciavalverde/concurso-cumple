@@ -4,8 +4,8 @@ App para el concurso: TV + presentador + un móvil por equipo. 4 equipos; cada p
 
 | Ruta | Para |
 |---|---|
-| `/tv` | Portátil conectado a la TV. Pulsa «Activar pantalla y sonido» (sin ese clic el navegador no deja sonar los MP3). |
-| `/presentador` | Tu móvil/portátil (PIN). Elige prueba en el menú y avanza con los botones grandes. |
+| `/tv` | Portátil conectado a la TV: doble clic en **`tools/concurso-tv.command`** (copia en el Escritorio: «Concurso TV»). Abre Chrome a pantalla completa y con sonido permitido; en la TV no hay que tocar nada (salir: Cmd+Q). |
+| `/presentador` | Tu móvil/portátil (PIN). Lo maneja todo: pruebas, puntos, vista de la TV, sonido/volumen de la TV y «Recargar TV». Avisa si la TV está sin sonido. |
 | `/` | Móviles de los equipos: escanean el QR de la TV. |
 | `/admin` | Editar preguntas, subir MP3 y fotos (PIN). Lo marcado con ✏️ está por rellenar. |
 
