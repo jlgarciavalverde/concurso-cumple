@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Marca, Publico } from "../../shared/tipos.ts";
-import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, pitido, posRosco } from "../components/comun.tsx";
+import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, pitido, posRosco, fmt } from "../components/comun.tsx";
 import { useCanal } from "../socket.ts";
 
 const AUTH = { rol: "tv" };
@@ -35,7 +35,7 @@ export function Tv() {
           {enJuego.map((e) => (
             <div key={e.id} className={`tv-eq ${p.pulsado === e.id || p.turno === e.id ? "on" : ""}`} style={conColor(e.color)}>
               <span>{e.nombre}</span>
-              <span className="n">{e.total}</span>
+              <span className="n">{fmt(e.total)}</span>
             </div>
           ))}
         </div>
@@ -170,7 +170,10 @@ function Test({ p, desfase }: { p: Publico; desfase: number }) {
               <span className="forma">{FORMAS[i % 4]}</span>
               <span style={{ flex: 1 }}>{o}</span>
               {quien.map((e) => (
-                <span key={e.id} className="chip" style={{ background: e.color, color: "#fff", fontSize: "2.2vh" }}>{e.nombre}</span>
+                <span key={e.id} className="chip" style={{ background: e.color, color: "#fff", fontSize: "2.2vh" }}>
+                  {e.nombre}
+                  {p.bonus?.[e.id] ? ` ⚡+${String(p.bonus[e.id]).replace(".", ",")}` : ""}
+                </span>
               ))}
             </div>
           );
@@ -218,7 +221,7 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
   );
 }
 
-const MARCA: Record<NonNullable<Marca>, string> = { ok: "✅", ko: "❌", nada: "⚫" };
+const MARCA: Record<NonNullable<Marca>, string> = { ok: "✅", medio: "🟡", ko: "❌", nada: "⚫" };
 
 function AdivinarTv({ p, desfase }: { p: Publico; desfase: number }) {
   const s = p.sub!;
@@ -406,13 +409,14 @@ function ManualTv({ p, desfase }: { p: Publico; desfase: number }) {
       <div className="tv-titulo">{s.emoji} {s.titulo}</div>
       {s.descripcion && <div className="tv-sub">{s.descripcion}</div>}
       {e && <div className="pulsado" style={{ background: e.color, fontSize: "6vh" }}>Turno: {e.nombre}</div>}
+      {p.fase === "jugando" && p.fin !== null && <Cuenta fin={p.fin} inicio={p.abiertaEn} desfase={desfase} tam="20vh" />}
       {s.cronometro && (p.cronometro.desde !== null || p.cronometro.acumulado > 0) && <Crono c={p.cronometro} desfase={desfase} />}
       {Object.keys(p.crudo).length > 0 && (
         <div className="fila" style={{ gap: "2vw", justifyContent: "center" }}>
           {p.equipos.map((q) => (
             <div key={q.id} className="tv-eq" style={conColor(q.color)}>
               <span>{q.nombre}&nbsp;</span>
-              <span className="n">{p.crudo[q.id] ?? "—"}</span>
+              <span className="n">{p.crudo[q.id] ?? "—"}{s.medida && p.crudo[q.id] !== undefined ? <small style={{ fontSize: "0.55em", opacity: 0.8 }}> {s.medida}</small> : null}</span>
             </div>
           ))}
         </div>
@@ -432,15 +436,15 @@ function Resultado({ p }: { p: Publico }) {
           <tr className="suave" style={{ fontSize: "2.4vh" }}>
             <th>Equipo</th>
             <th>{etiquetaCrudo(p)}</th>
-            <th style={{ textAlign: "right" }}>{p.confirmado ? "Puntos" : "Puntos (provisional)"}</th>
+            <th style={{ textAlign: "right" }}>Puntos</th>
           </tr>
         </thead>
         <tbody>
           {filas.map((e) => (
             <tr key={e.id}>
               <td><span className="punto" style={{ background: e.color, marginRight: 12 }} />{e.nombre}</td>
-              <td>{p.crudo[e.id] ?? "—"}</td>
-              <td className="pts">+{p.ranking?.[e.id] ?? 0}</td>
+              <td>{p.crudo[e.id] === undefined ? "—" : fmt(p.crudo[e.id])}</td>
+              <td className="pts">+{fmt(p.ranking?.[e.id])}</td>
             </tr>
           ))}
         </tbody>
@@ -464,14 +468,14 @@ function Desglose({ p }: { p: Publico }) {
           {p.desglose.map((f) => (
             <tr key={f.pruebaId}>
               <td>{f.emoji} {f.titulo}</td>
-              {p.equipos.map((e) => <td key={e.id}>{f.puntos[e.id] ?? 0}</td>)}
+              {p.equipos.map((e) => <td key={e.id}>{fmt(f.puntos[e.id])}</td>)}
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <td>Total</td>
-            {p.equipos.map((e) => <td key={e.id}>{e.total}</td>)}
+            {p.equipos.map((e) => <td key={e.id}>{fmt(e.total)}</td>)}
           </tr>
         </tfoot>
       </table>
@@ -495,7 +499,7 @@ function Podio({ p }: { p: Publico }) {
             <div key={e.id} className="peana" style={{ height: `${alto(n)}%`, background: e.color, animationDelay: `${(vis.length - i) * 0.25}s` }}>
               <div className="pos">{n === 1 ? "🥇" : n === 2 ? "🥈" : n === 3 ? "🥉" : n}</div>
               <div className="nom">{e.nombre}</div>
-              <div className="pt">{e.total} pts</div>
+              <div className="pt">{fmt(e.total)} pts</div>
             </div>
           );
         })}

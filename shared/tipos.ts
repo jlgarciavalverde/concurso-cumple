@@ -48,13 +48,14 @@ interface SubBase {
 }
 
 export type Sub =
-  | (SubBase & { tipo: "test"; puntuacion: "ranking" | "aciertos"; rapidez: boolean; segundos: number; preguntas: PreguntaTest[] })
+  // rapidez: plus escalonado para los primeros en acertar (bonus, por defecto +0,5 y +0,25)
+  | (SubBase & { tipo: "test"; puntuacion: "ranking" | "aciertos"; rapidez: boolean; bonus?: number[]; segundos: number; preguntas: PreguntaTest[] })
   // modo «porItem» (por defecto): una letra/mezcla cada vez con su cuenta atrás; «hoja»: todo a la vez
   | (SubBase & { tipo: "adivinar"; estilo: "lista" | "rosco"; modo?: "porItem" | "hoja"; segundosItem?: number; opciones: string[]; segundos: number; items: ItemAdivinar[] })
   | (SubBase & { tipo: "precio"; sinPasarse: boolean; segundos: number; productos: Producto[] })
   | (SubBase & { tipo: "cancion"; canciones: Cancion[] })
   | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; tarjetaEnTv?: boolean; segundos: number; tarjetas: Tarjeta[] })
-  | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean });
+  | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean; segundos?: number });
 
 export type TipoSub = Sub["tipo"];
 
@@ -111,7 +112,7 @@ export interface Hoja {
 }
 
 /** Resultado de un item para un equipo: acierto, fallo, sin responder o aún sin corregir. */
-export type Marca = "ok" | "ko" | "nada" | null;
+export type Marca = "ok" | "medio" | "ko" | "nada" | null;
 
 export interface Ajuste {
   equipo: EquipoId;
@@ -123,8 +124,8 @@ export interface Estado {
   codigo: string;
   vivo: Vivo;
   crudo: Record<string, Record<EquipoId, number>>; // por sub: aciertos, tiempo, etc.
-  correcciones: Record<string, Record<EquipoId, boolean[]>>; // adivinar: acierto por item (editable)
-  puntos: Record<string, Record<EquipoId, number>>; // por sub, confirmados
+  correcciones: Record<string, Record<EquipoId, number[]>>; // adivinar: puntos por item (1/0 automático, editable: ½…)
+  puntos: Record<string, Record<EquipoId, number>>; // por sub, fijados a mano (si no, se calculan en directo)
   ajustes: Ajuste[];
   tarjetasUsadas: Record<string, number[]>;
 }
@@ -161,7 +162,8 @@ export interface Publico {
   solucion?: { correcta?: number; texto?: string; precio?: number; respuestas?: string[] };
   contestados: EquipoId[];
   respuestasVisibles?: Record<EquipoId, unknown>;
-  hojas?: Record<EquipoId, { entregada: boolean; contestadas: number; marcas: Marca[]; valores: string[] }>;
+  bonus?: Record<EquipoId, number>; // plus por rapidez en la pregunta revelada
+  hojas?: Record<EquipoId, { entregada: boolean; contestadas: number; marcas: Marca[]; puntos: number[]; valores: string[] }>;
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
   sonando: boolean;

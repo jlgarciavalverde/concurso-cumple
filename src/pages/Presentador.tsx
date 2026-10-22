@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
-import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS } from "../components/comun.tsx";
+import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS, fmt } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function usePin() {
@@ -148,9 +149,23 @@ const Abrir = ({ a, texto = "▶️ Empezar" }: { a: A; texto?: string }) => (
 function ControlTest({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "test" }>; a: A }) {
   const v = h.estado.vivo;
   const q = sub.preguntas[v.indice];
-  if (v.fase === "intro") return <Abrir a={a} texto={`▶️ Primera pregunta (${sub.preguntas.length})`} />;
+  const bonus = sub.bonus ?? BONUS_RAPIDEZ;
+  const rapidez = (
+    <label className="fila">
+      <input type="checkbox" checked={sub.rapidez} onChange={(e) => a({ t: "config", campo: "rapidez", valor: e.target.checked })} />
+      ⚡ Plus por rapidez (1º en acertar +{bonus[0] ?? 0}{bonus[1] ? `, 2º +${bonus[1]}` : ""}{bonus[2] ? `, 3º +${bonus[2]}` : ""})
+    </label>
+  );
+  if (v.fase === "intro")
+    return (
+      <>
+        {rapidez}
+        <Abrir a={a} texto={`▶️ Primera pregunta (${sub.preguntas.length})`} />
+      </>
+    );
   return (
     <>
+      {rapidez}
       <div className="secreto" style={{ color: "var(--texto)", fontSize: "1.3em" }}>{q?.texto}</div>
       <div className="col" style={{ gap: 6 }}>
         {q?.opciones.map((o, i) => (
@@ -230,12 +245,18 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
   const celda = (eqId: string, i: number) => {
     const val = v.hojas[eqId]?.valores[i] ?? "";
     if (!corregido(i)) return val ? `✍️ ${val}` : <span className="suave">—</span>;
-    const ok = corr?.[eqId]?.[i];
-    if (!val.trim()) return <span title="Sin responder">⚫</span>;
+    const n = Number(corr?.[eqId]?.[i]) || 0;
+    const poner = (puntos: number) => a({ t: "correccion", equipo: eqId, item: i, puntos });
     return (
-      <button className={`btn peq ${ok ? "ok" : "ko"}`} title="Cambiar corrección" onClick={() => a({ t: "correccion", equipo: eqId, item: i, ok: !ok })}>
-        {ok ? "✓" : "✗"} {val}
-      </button>
+      <div className="col" style={{ gap: 4 }}>
+        <span>{val.trim() ? val : <span className="suave">⚫ sin responder</span>}</span>
+        <div className="fila" style={{ gap: 4, flexWrap: "nowrap" }}>
+          <button className={`btn peq ${n === 0 ? "ko" : ""}`} onClick={() => poner(0)} aria-label="Fallo">✗</button>
+          <button className={`btn peq ${n > 0 && n < 1 ? "oro" : ""}`} onClick={() => poner(0.5)} aria-label="Medio punto">½</button>
+          <button className={`btn peq ${n >= 1 ? "ok" : ""}`} onClick={() => poner(1)} aria-label="Acierto">✓</button>
+          <NumEdit valor={n} onCambio={(x) => poner(x ?? 0)} estrecho />
+        </div>
+      </div>
     );
   };
 
@@ -276,7 +297,7 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
       <>
         {cfg}
         {tabla}
-        {v.fase === "revelar" && <div className="suave">Pulsa una respuesta para darla por buena o mala.</div>}
+        {v.fase === "revelar" && <div className="suave">Corrige con ✗ · ½ · ✓ o pon los puntos que quieras.</div>}
         <div className="fila">
           {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir</button>}
           {v.fase === "revelar" && <button className="btn prim grande" onClick={() => a({ t: "siguiente" })}>🏁 Resultados</button>}
@@ -304,7 +325,7 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
             ))}
           </tbody>
         </table>
-        <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Pulsa una respuesta para darla por buena o mala. ⚫ = no respondió."}</div>
+        <div className="suave">{v.fase === "jugando" ? `Han respondido ${contestados}/${h.contenido.equipos.length}. Se corrige solo al acabar el tiempo o al responder todos.` : "Corrige con ✗ · ½ · ✓ o pon los puntos que quieras. ⚫ = no respondió."}</div>
       </div>
       <div className="fila">
         {v.fase === "jugando" && <button className="btn oro grande" onClick={() => a({ t: "revelar" })}>👁️ Cerrar y corregir ya</button>}
@@ -402,6 +423,8 @@ function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub,
   const v = h.estado.vivo;
   return (
     <>
+      <Segundos valor={sub.segundos ?? 0} etiqueta="Cuenta atrás en la TV" campo="segundos" a={a} jugando={v.fase === "jugando"} />
+      {(sub.segundos ?? 0) > 0 && <Abrir a={a} texto={v.fase === "jugando" ? `🔄 Reiniciar cuenta atrás (${sub.segundos} s)` : `▶️ Empezar cuenta atrás (${sub.segundos} s)`} />}
       <div className="fila">
         <span className="suave">Turno (opcional):</span>
         <button className={`btn peq ${!v.turno ? "prim" : ""}`} onClick={() => a({ t: "turno", equipo: null })}>Todos</button>
@@ -456,12 +479,14 @@ function Crudos({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
   );
 }
 
-function NumEdit({ valor, onCambio }: { valor: number | undefined; onCambio: (n: number | null) => void }) {
+function NumEdit({ valor, onCambio, estrecho }: { valor: number | undefined; onCambio: (n: number | null) => void; estrecho?: boolean }) {
   const [txt, setTxt] = useState(valor?.toString() ?? "");
   useEffect(() => setTxt(valor?.toString() ?? ""), [valor]);
   return (
     <input
       className="campo num"
+      style={estrecho ? { width: "3.6em" } : undefined}
+      aria-label="Puntos"
       inputMode="decimal"
       value={txt}
       onChange={(e) => setTxt(e.target.value)}
@@ -479,7 +504,8 @@ function NumEdit({ valor, onCambio }: { valor: number | undefined; onCambio: (n:
 
 function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
   const p = h.publico;
-  const confirmado = h.estado.puntos[sub.id];
+  const fijados = h.estado.puntos[sub.id];
+  const [editando, setEditando] = useState(false);
   const [puntos, setPuntos] = useState<Record<string, number>>(p.ranking ?? {});
   const clave = JSON.stringify(p.ranking);
   useEffect(() => setPuntos(p.ranking ?? {}), [clave]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -490,7 +516,7 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
           <tr>
             <th>Equipo</th>
             <th>{etiquetaCrudo(p)}</th>
-            <th>Puntos</th>
+            <th>Puntos al marcador</th>
           </tr>
         </thead>
         <tbody>
@@ -499,10 +525,10 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
               <td><span className="punto" style={{ background: e.color }} /> {e.nombre}</td>
               <td><NumEdit valor={h.estado.crudo[sub.id]?.[e.id]} onCambio={(n) => a({ t: "crudo", equipo: e.id, valor: n })} /></td>
               <td>
-                {confirmado ? (
-                  <b className="secreto" style={{ fontSize: "1.2em" }}>{confirmado[e.id] ?? 0}</b>
+                {editando ? (
+                  <input className="campo num" inputMode="decimal" value={puntos[e.id] ?? 0} onChange={(ev) => setPuntos({ ...puntos, [e.id]: Number(ev.target.value.replace(",", ".")) || 0 })} />
                 ) : (
-                  <input className="campo num" inputMode="numeric" value={puntos[e.id] ?? 0} onChange={(ev) => setPuntos({ ...puntos, [e.id]: Number(ev.target.value) || 0 })} />
+                  <b className="secreto" style={{ fontSize: "1.2em" }}>+{fmt(p.ranking?.[e.id])}</b>
                 )}
               </td>
             </tr>
@@ -510,16 +536,20 @@ function Resultado({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
         </tbody>
       </table>
       <div className="fila">
-        {confirmado ? (
+        {editando ? (
           <>
-            <span className="chip">✅ Puntos sumados al marcador</span>
-            <button className="btn peq" onClick={() => a({ t: "desconfirmar" })}>Quitar del marcador</button>
+            <button className="btn ok" onClick={() => { a({ t: "confirmar", puntos }); setEditando(false); }}>💾 Fijar estos puntos</button>
+            <button className="btn peq" onClick={() => setEditando(false)}>Cancelar</button>
           </>
         ) : (
-          <button className="btn ok grande" onClick={() => a({ t: "confirmar", puntos })}>✅ Confirmar y sumar al marcador</button>
+          <>
+            <span className="chip">{fijados ? "✏️ Puntos fijados a mano" : "⚡ Puntos automáticos, ya en el marcador"}</span>
+            <button className="btn peq" onClick={() => setEditando(true)}>Cambiar a mano</button>
+            {fijados && <button className="btn peq" onClick={() => a({ t: "desconfirmar" })}>Volver a automático</button>}
+          </>
         )}
       </div>
-      {!confirmado && <div className="suave">Puedes cambiar los puntos antes de confirmar (empates, penalizaciones…).</div>}
+      <div className="suave">Los puntos suman al marcador solos. Si corriges un resultado, se recalculan (salvo que los fijes a mano).</div>
     </>
   );
 }
@@ -543,12 +573,12 @@ function Marcador({ h, a }: { h: VistaHost; a: A }) {
             {h.publico.desglose.map((f) => (
               <tr key={f.pruebaId}>
                 <td>{f.emoji} {f.titulo}</td>
-                {h.publico.equipos.map((e) => <td key={e.id}>{f.puntos[e.id] ?? 0}</td>)}
+                {h.publico.equipos.map((e) => <td key={e.id}>{fmt(f.puntos[e.id])}</td>)}
               </tr>
             ))}
             <tr>
               <td><b>Total</b></td>
-              {h.publico.equipos.map((e) => <td key={e.id}><b className="secreto" style={{ fontSize: "1.2em" }}>{e.total}</b></td>)}
+              {h.publico.equipos.map((e) => <td key={e.id}><b className="secreto" style={{ fontSize: "1.2em" }}>{fmt(e.total)}</b></td>)}
             </tr>
           </tbody>
         </table>

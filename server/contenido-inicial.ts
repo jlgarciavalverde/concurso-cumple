@@ -262,7 +262,7 @@ export const contenidoInicial = (): Contenido => ({
       emoji: "🎲",
       agrupar: false,
       subs: [
-        { id: "torre", tipo: "manual", titulo: "Torre de vasos", descripcion: "Montad la torre lo más rápido posible. Gana el mejor tiempo.", medida: "segundos", mayorMejor: false, cronometro: true },
+        { id: "torre", tipo: "manual", titulo: "Torre de vasos", descripcion: "¡A apilar vasos! Gana quien más vasos consiga poner.", medida: "vasos", mayorMejor: true, cronometro: false, segundos: 60 },
         { id: "dibujo", tipo: "tarjetas", modo: "dibujo", tarjetaEnTv: true, titulo: "Dibujo imposible", descripcion: "Uno dibuja con la condición que sale en pantalla; su equipo adivina.", segundos: 60, tarjetas: dibujos },
         { id: "prohibida", tipo: "tarjetas", modo: "palabra", tarjetaEnTv: true, titulo: "Palabra prohibida", descripcion: "Haz que tu equipo adivine la palabra sin decir las prohibidas.", segundos: 60, tarjetas: prohibidas },
       ],
@@ -272,7 +272,7 @@ export const contenidoInicial = (): Contenido => ({
       titulo: "40 preguntas de cultura general",
       emoji: "🧠",
       agrupar: false,
-      subs: [{ id: "cultura", tipo: "test", titulo: "Cultura general", descripcion: "1 punto por acierto.", puntuacion: "aciertos", rapidez: false, segundos: 20, preguntas: cultura }],
+      subs: [{ id: "cultura", tipo: "test", titulo: "Cultura general", descripcion: "1 punto por acierto (+ plus por rapidez).", puntuacion: "aciertos", rapidez: true, segundos: 20, preguntas: cultura }],
     },
   ],
 });

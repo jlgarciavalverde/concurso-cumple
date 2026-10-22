@@ -21,11 +21,18 @@ export function clasificar(
   return out;
 }
 
-/** Kahoot: 1000 si contestas al instante, 500 al límite; 0 si fallas. */
-export function puntosRapidez(ms: number, segundos: number): number {
-  const t = Math.min(Math.max(ms / (segundos * 1000), 0), 1);
-  return Math.round(1000 * (1 - t / 2));
+/**
+ * Preguntas tipo test: 1 punto por acierto y, con el plus por rapidez, el 1º en acertar suma bonus[0],
+ * el 2º bonus[1]… (por defecto +0,5 y +0,25). Devuelve lo que suma cada equipo en esa pregunta.
+ */
+export function puntosTest(respuestas: Record<EquipoId, { valor: unknown; ms: number }>, correcta: number, bonus: number[] | null): Record<EquipoId, number> {
+  const aciertos = Object.entries(respuestas)
+    .filter(([, r]) => r.valor === correcta)
+    .sort((a, b) => a[1].ms - b[1].ms);
+  return Object.fromEntries(aciertos.map(([eq], i) => [eq, 1 + (bonus?.[i] ?? 0)]));
 }
+
+export const BONUS_RAPIDEZ = [0.5, 0.25];
 
 // ---------- Corrección de respuestas escritas ----------
 // Generosa a propósito: mejor dar por buena una respuesta dudosa (el presentador puede quitarla) que
@@ -139,7 +146,7 @@ export function coincide(respuesta: string, solucion: string): boolean {
 }
 
 /**
- * Precio justo: 3/2/1/0 por cercanía en cada producto. Con «sin pasarse», quien se pasa no puntúa.
+ * Precio justo: 1 punto al más cercano en cada producto (si empatan, a los dos). Con «sin pasarse», quien se pasa no puntúa.
  */
 export function puntosPrecio(ofertas: Record<EquipoId, number | undefined>, precio: number, sinPasarse: boolean): Record<EquipoId, number> {
   const distancias: Record<EquipoId, number | null> = {};
@@ -148,7 +155,7 @@ export function puntosPrecio(ofertas: Record<EquipoId, number | undefined>, prec
     else if (sinPasarse && v > precio) distancias[id] = null;
     else distancias[id] = Math.abs(precio - v);
   }
-  return clasificar(distancias, [3, 2, 1, 0], false);
+  return clasificar(distancias, [1], false);
 }
 
 /** Puntos que daría una sub según su crudo actual (antes de confirmar). */
@@ -163,21 +170,32 @@ export function puntosPropuestos(sub: Sub, crudo: Record<EquipoId, number>, equi
   // En manual sin medida numérica (p. ej. tiempo), quien no tiene marca no puntúa
   const mayorMejor = sub.tipo === "manual" ? sub.mayorMejor : true;
   if (sub.tipo !== "manual") for (const id of equipos) valores[id] = crudo[id] ?? 0;
+  // Sin aciertos, sin puntos: un 0 no empata en 2º puesto con los demás ceros (ni se llevan 10 todos al empezar)
+  if (mayorMejor) for (const id of equipos) if ((valores[id] ?? 0) <= 0) valores[id] = null;
   return clasificar(valores, tabla, mayorMejor);
 }
 
-/** Puntos de una prueba ya confirmados (con «agrupar» se reparte la tabla sobre la suma). */
+/** Puntos de una subprueba: los fijados a mano por el presentador o, si no, los que van saliendo en directo. */
+export function puntosSub(sub: Sub, estado: Estado, equipos: EquipoId[], tabla: number[]): Record<EquipoId, number> | null {
+  const fijados = estado.puntos[sub.id];
+  if (fijados) return fijados;
+  const crudo = estado.crudo[sub.id];
+  if (!crudo || !Object.keys(crudo).length) return null;
+  return puntosPropuestos(sub, crudo, equipos, tabla);
+}
+
+/** Puntos de una prueba (con «agrupar» se reparte la tabla sobre la suma de sus subpruebas). */
 export function puntosPrueba(prueba: Prueba, estado: Estado, equipos: EquipoId[], tabla: number[]): Record<EquipoId, number> {
   const suma: Record<EquipoId, number> = {};
   for (const id of equipos) suma[id] = 0;
   let alguna = false;
   for (const sub of prueba.subs) {
-    const p = estado.puntos[sub.id];
+    const p = puntosSub(sub, estado, equipos, tabla);
     if (!p) continue;
     alguna = true;
     for (const id of equipos) suma[id] += p[id] ?? 0;
   }
-  if (!prueba.agrupar || !alguna) return suma;
+  if (!prueba.agrupar || !alguna || Object.values(suma).every((x) => x <= 0)) return suma;
   return clasificar(suma, tabla, true);
 }
 

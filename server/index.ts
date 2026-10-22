@@ -37,7 +37,23 @@ function escribir(f: string, datos: unknown) {
 }
 
 if (!existsSync(fContenido)) escribir(fContenido, contenidoInicial());
-const juego = new Juego(leer<Contenido>(fContenido, contenidoInicial), leer<Estado>(fEstado, estadoVacio));
+
+/** Ajustes de reglas sobre contenido ya guardado, solo si sigue con los valores antiguos de fábrica. */
+function migrar(c: Contenido): boolean {
+  let cambio = false;
+  for (const p of c.pruebas)
+    for (const s of p.subs)
+      if (s.id === "torre" && s.tipo === "manual" && s.medida === "segundos" && !s.mayorMejor) {
+        // v0.3.0: la torre se puntúa por vasos apilados, no por tiempo
+        Object.assign(s, { medida: "vasos", mayorMejor: true, cronometro: false, segundos: 60, descripcion: "¡A apilar vasos! Gana quien más vasos consiga poner." });
+        cambio = true;
+      }
+  return cambio;
+}
+
+const contenido = leer<Contenido>(fContenido, contenidoInicial);
+if (migrar(contenido)) escribir(fContenido, contenido);
+const juego = new Juego(contenido, leer<Estado>(fEstado, estadoVacio));
 
 const pinOk = (p: unknown) => {
   const a = Buffer.from(String(p ?? ""));

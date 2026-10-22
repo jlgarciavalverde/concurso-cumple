@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clasificar, coincide, puntosPrecio, puntosRapidez, totales } from "../shared/puntuacion.ts";
+import { clasificar, coincide, puntosPrecio, puntosTest, totales } from "../shared/puntuacion.ts";
 import { contenidoInicial } from "../server/contenido-inicial.ts";
 import { estadoVacio, Juego } from "../server/juego.ts";
 
@@ -19,10 +19,10 @@ describe("clasificar", () => {
 });
 
 describe("reglas", () => {
-  it("rapidez: 1000 al instante, 500 al límite", () => {
-    expect(puntosRapidez(0, 20)).toBe(1000);
-    expect(puntosRapidez(20000, 20)).toBe(500);
-    expect(puntosRapidez(99999, 20)).toBe(500);
+  it("plus por rapidez escalonado: 1º +0,5, 2º +0,25, resto 1; sin plus todos 1", () => {
+    const r = { a: { valor: 1, ms: 900 }, b: { valor: 1, ms: 300 }, c: { valor: 0, ms: 100 }, d: { valor: 1, ms: 2000 } };
+    expect(puntosTest(r, 1, [0.5, 0.25])).toEqual({ b: 1.5, a: 1.25, d: 1 });
+    expect(puntosTest(r, 1, null)).toEqual({ b: 1, a: 1, d: 1 });
   });
   it("coincide ignora tildes, artículos y alternativas", () => {
     expect(coincide("  el CARBÓN ", "Carbón/Carbones")).toBe(true);
@@ -31,8 +31,10 @@ describe("reglas", () => {
     expect(coincide("menta", "Sandía")).toBe(false);
   });
   it("precio justo con y sin pasarse", () => {
-    expect(puntosPrecio({ a: 10, b: 12, c: 20, d: undefined }, 11, false)).toEqual({ a: 3, b: 3, c: 1, d: 0 });
-    expect(puntosPrecio({ a: 10, b: 12, c: 20, d: 1 }, 11, true)).toEqual({ a: 3, b: 0, c: 0, d: 2 });
+    // solo el más cercano se lleva el punto (empate: los dos)
+    expect(puntosPrecio({ a: 10, b: 12, c: 20, d: undefined }, 11, false)).toEqual({ a: 1, b: 1, c: 0, d: 0 });
+    expect(puntosPrecio({ a: 9, b: 12, c: 20, d: 1 }, 11, false)).toEqual({ a: 0, b: 1, c: 0, d: 0 });
+    expect(puntosPrecio({ a: 10, b: 12, c: 20, d: 1 }, 11, true)).toEqual({ a: 1, b: 0, c: 0, d: 0 });
   });
 });
 
@@ -44,7 +46,7 @@ function partida() {
 }
 
 describe("Juego", () => {
-  it("kahoot: puntúa por rapidez, se revela solo cuando contestan todos y confirma 10/5/3/1", () => {
+  it("kahoot: acierto + plus por rapidez, se revela solo cuando contestan todos y el marcador va en directo", () => {
     const { j, c, avanza } = partida();
     const sub = c.pruebas[0].subs[0];
     if (sub.tipo !== "test") throw new Error();
@@ -59,13 +61,17 @@ describe("Juego", () => {
     expect(j.estado.vivo.fase).toBe("jugando");
     j.equipo("amarillo", { t: "responder", valor: 3 });
     expect(j.estado.vivo.fase).toBe("revelar");
-    expect(j.estado.crudo.kahoot).toEqual({ rojo: 1000, azul: 750, verde: 0, amarillo: 0 });
+    expect(j.estado.crudo.kahoot).toEqual({ rojo: 1.5, azul: 1.25, verde: 0, amarillo: 0 });
+    expect(j.publico().bonus).toEqual({ rojo: 0.5, azul: 0.25 });
+    // el marcador ya lo refleja sin confirmar nada
+    expect(totales(c, j.estado)).toEqual({ rojo: 10, azul: 5, verde: 0, amarillo: 0 }); // sin aciertos, sin puntos
     j.host({ t: "siguiente" });
     expect(j.estado.vivo.fase).toBe("resultado");
-    const pub = j.publico();
-    expect(pub.ranking).toEqual({ rojo: 10, azul: 5, verde: 3, amarillo: 3 });
-    j.host({ t: "confirmar", puntos: pub.ranking! });
-    expect(totales(c, j.estado)).toEqual({ rojo: 10, azul: 5, verde: 3, amarillo: 3 });
+    // el presentador puede fijarlos a mano y luego volver a automático
+    j.host({ t: "confirmar", puntos: { rojo: 10, azul: 10, verde: 0, amarillo: 0 } });
+    expect(totales(c, j.estado)).toEqual({ rojo: 10, azul: 10, verde: 0, amarillo: 0 });
+    j.host({ t: "desconfirmar" });
+    expect(totales(c, j.estado).azul).toBe(5);
   });
 
   it("no revela la respuesta correcta antes de tiempo y cierra al acabar el tiempo", () => {
@@ -77,11 +83,11 @@ describe("Juego", () => {
     avanza(21000);
     expect(j.tic()).toBe(true);
     expect(j.publico().solucion?.correcta).toBe(1);
-    expect(j.estado.crudo.cultura.rojo).toBe(1);
+    expect(j.estado.crudo.cultura.rojo).toBe(1.5); // acierto + plus del más rápido
     expect(j.equipo("azul", { t: "responder", valor: 1 })).toBe(false);
     // cultura general: 1 punto por acierto, sin tabla
     j.host({ t: "resultado" });
-    expect(j.publico().ranking).toEqual({ rojo: 1, azul: 0, verde: 0, amarillo: 0 });
+    expect(j.publico().ranking).toEqual({ rojo: 1.5, azul: 0, verde: 0, amarillo: 0 });
   });
 
   it("pulsador: gana el primero, fallo rebota y acierto suma", () => {
@@ -132,7 +138,10 @@ describe("Juego", () => {
     for (const eq of ["rojo", "azul", "verde", "amarillo"]) j.equipo(eq, { t: "item", valor: eq === "azul" ? "papel albal" : "nada" });
     expect(j.estado.vivo.fase).toBe("revelar"); // todos respondieron antes de tiempo
     expect(j.estado.crudo.rosco).toEqual({ rojo: 1, azul: 1, verde: 1, amarillo: 0 });
-    j.host({ t: "correccion", equipo: "azul", item: 0, ok: true });
+    j.host({ t: "correccion", equipo: "azul", item: 0, puntos: 0.5 });
+    expect(j.estado.crudo.rosco.azul).toBe(1.5);
+    expect(j.publico().hojas?.azul.marcas[0]).toBe("medio");
+    j.host({ t: "correccion", equipo: "azul", item: 0, puntos: 1 });
     expect(j.estado.crudo.rosco.azul).toBe(2);
   });
 
@@ -180,8 +189,21 @@ describe("Juego", () => {
     expect(j.estado.crudo.prohibida.rojo).toBe(3);
   });
 
+  it("torre de vasos: cuenta atrás y gana quien más vasos pone", () => {
+    const { j } = partida();
+    j.host({ t: "ir", subId: "torre" });
+    j.host({ t: "empezar" });
+    expect(j.publico().fin! - j.publico().abiertaEn).toBe(60000);
+    j.host({ t: "crudo", equipo: "rojo", valor: 12 });
+    j.host({ t: "crudo", equipo: "azul", valor: 20 });
+    j.host({ t: "crudo", equipo: "verde", valor: 12 });
+    expect(j.publico().ranking).toEqual({ rojo: 5, azul: 10, verde: 5, amarillo: 0 });
+  });
+
   it("manual con cronómetro: guarda tiempos sin pararlo y menor es mejor", () => {
-    const { j, avanza } = partida();
+    const { j, c, avanza } = partida();
+    const torre = c.pruebas[4].subs[0];
+    Object.assign(torre, { medida: "segundos", mayorMejor: false, cronometro: true });
     j.host({ t: "ir", subId: "torre" });
     j.host({ t: "crono", op: "start" });
     avanza(12340);
@@ -209,5 +231,17 @@ describe("Juego", () => {
     j.host({ t: "ir", subId: "sabor" });
     j.host({ t: "confirmar", puntos: { rojo: 1, azul: 10, verde: 5, amarillo: 3 } });
     expect(totales(c, j.estado)).toEqual({ azul: 10, rojo: 5, verde: 3, amarillo: 1 });
+  });
+});
+
+describe("marcador en directo", () => {
+  it("todos a 0 no suma nada; los que siguen a 0 tampoco", () => {
+    const { j, c } = partida();
+    j.host({ t: "ir", subId: "rosco" });
+    j.host({ t: "empezar" });
+    j.host({ t: "revelar" });
+    expect(totales(c, j.estado)).toEqual({ rojo: 0, azul: 0, verde: 0, amarillo: 0 });
+    j.host({ t: "correccion", equipo: "verde", item: 0, puntos: 0.5 });
+    expect(totales(c, j.estado)).toEqual({ rojo: 0, azul: 0, verde: 10, amarillo: 0 });
   });
 });

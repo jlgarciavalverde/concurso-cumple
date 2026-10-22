@@ -88,3 +88,6 @@ export function desbloquearAudio() {
     /* sin audio */
   }
 }
+
+/** 1.5 → «1,5»; enteros sin decimales. */
+export const fmt = (n: number | undefined) => (n ?? 0).toLocaleString("es-ES", { maximumFractionDigits: 2 });

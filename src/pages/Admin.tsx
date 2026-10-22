@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Cancion, Contenido, ItemAdivinar, PreguntaTest, Producto, Sub, Tarjeta } from "../../shared/tipos.ts";
+import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { FORMAS } from "../components/comun.tsx";
 import { usePin } from "./Presentador.tsx";
 
@@ -282,7 +283,12 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
                   <option value="aciertos">1 punto por acierto</option>
                 </select>
               </Campo>
-              <label className="fila suave"><input type="checkbox" checked={sub.rapidez} onChange={(e) => set({ rapidez: e.target.checked })} /> Más puntos cuanto más rápido</label>
+              <label className="fila suave"><input type="checkbox" checked={sub.rapidez} onChange={(e) => set({ rapidez: e.target.checked })} /> ⚡ Plus por rapidez</label>
+              {sub.rapidez && (
+                <Campo etiqueta="Plus para el 1º, 2º, 3º… en acertar (separados por comas)">
+                  <Texto v={(sub.bonus ?? BONUS_RAPIDEZ).join(", ")} on={(t) => set({ bonus: t.split(",").map((x) => Number(x.trim().replace(/\s/g, ""))).filter((n) => Number.isFinite(n) && n >= 0) })} />
+                </Campo>
+              )}
             </div>
             <Lista<PreguntaTest>
               nombre="Pregunta"
@@ -358,7 +364,7 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
               <Campo etiqueta="Segundos por producto"><Numero v={sub.segundos} on={(segundos) => set({ segundos })} /></Campo>
               <label className="fila suave"><input type="checkbox" checked={sub.sinPasarse} onChange={(e) => set({ sinPasarse: e.target.checked })} /> Sin pasarse (quien se pasa no puntúa)</label>
             </div>
-            <div className="suave">Cada producto: 3 puntos al más cercano, 2 al segundo, 1 al tercero. Al final se reparte 10/5/3/1 por la suma.</div>
+            <div className="suave">Cada producto: 1 punto al que más se acerque (si empatan, a los dos). Al final se reparte 10/5/3/1 según los puntos.</div>
             <Lista<Producto>
               nombre="Producto"
               items={sub.productos}
@@ -431,7 +437,8 @@ function EditorSub({ sub, onChange, subir }: { sub: Sub; onChange: (s: Sub) => v
                 <option value="0">El valor más bajo (p. ej. tiempo)</option>
               </select>
             </Campo>
-            <label className="fila suave"><input type="checkbox" checked={sub.cronometro} onChange={(e) => set({ cronometro: e.target.checked })} /> Cronómetro en la TV</label>
+            <Campo etiqueta="Cuenta atrás en la TV (s, 0 = sin)"><Numero v={sub.segundos ?? 0} on={(segundos) => set({ segundos })} /></Campo>
+            <label className="fila suave"><input type="checkbox" checked={sub.cronometro} onChange={(e) => set({ cronometro: e.target.checked })} /> Cronómetro (para medir tiempos)</label>
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
-import { conColor, Cuenta, equipoDe, FORMAS, posRosco } from "../components/comun.tsx";
+import { conColor, Cuenta, equipoDe, FORMAS, posRosco, fmt } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function Jugar() {
@@ -77,7 +77,7 @@ export function Jugar() {
     <div className="movil">
       <div className="movil-cab" style={{ background: yo.color }}>
         <span>{yo.nombre}</span>
-        <span>{yo.total} pts {!conectado && "· ⚠️"}</span>
+        <span>{fmt(yo.total)} pts {!conectado && "· ⚠️"}</span>
       </div>
       <div className="movil-cuerpo">
         <Cuerpo v={v} desfase={desfase} enviar={(a) => enviar("equipo", a)} />
@@ -116,7 +116,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
     return (
       <>
         <Espera emoji={p >= 10 ? "🏆" : p > 0 ? "👏" : "😅"} texto={s.titulo} />
-        <div className="resultado-movil bien">+{p} puntos{v.confirmado ? "" : " (provisional)"}</div>
+        <div className="resultado-movil bien">+{p} puntos al marcador</div>
       </>
     );
   }
@@ -148,7 +148,7 @@ function TestMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
     const bien = mia === v.solucion?.correcta;
     return (
       <>
-        <div className={`resultado-movil ${bien ? "bien" : "mal"}`}>{mia === undefined ? "⏰ Sin respuesta" : bien ? "✅ ¡Correcto!" : "❌ Fallo"}</div>
+        <div className={`resultado-movil ${bien ? "bien" : "mal"}`}>{mia === undefined ? "⏰ Sin respuesta" : bien ? "✅ ¡Correcto!" : "❌ Fallo"}{bien && v.bonus?.[v.yo] ? ` ⚡ +${String(v.bonus[v.yo]).replace(".", ",")} por rapidez` : ""}</div>
         <div className="espera suave">Correcta: {FORMAS[v.solucion?.correcta ?? 0]} {q.opciones?.[v.solucion?.correcta ?? 0]}</div>
       </>
     );
@@ -207,7 +207,7 @@ function PrecioMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; 
   );
 }
 
-const MARCA_TXT = { ok: "✅ ¡Correcto!", ko: "❌ Fallo", nada: "⚫ Sin responder" } as const;
+const MARCA_TXT = { ok: "✅ ¡Correcto!", medio: "🟡 Medio acierto", ko: "❌ Fallo", nada: "⚫ Sin responder" } as const;
 
 /** Rosco / olores / sabor de uno en uno: una respuesta por item, se corrige al acabar el tiempo o al responder todos. */
 function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
@@ -249,7 +249,10 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
         <b style={{ fontSize: rosco ? "1.1em" : "1.6em", textAlign: rosco ? "left" : "center" }}>{rosco ? `${it?.etiqueta} · ${it?.pregunta ?? ""}` : it?.etiqueta}</b>
         {v.fase === "revelar" ? (
           <>
-            <div className={`resultado-movil ${m === "ok" ? "bien" : m === "ko" ? "mal" : "nada"}`}>{m ? MARCA_TXT[m] : "…"}</div>
+            <div className={`resultado-movil ${m === "ok" ? "bien" : m === "ko" ? "mal" : m === "medio" ? "medio" : "nada"}`}>
+              {m ? MARCA_TXT[m] : "…"}
+              {m === "ok" || m === "medio" ? ` (+${String(v.hojas?.[v.yo]?.puntos[v.indice] ?? 0).replace(".", ",")})` : ""}
+            </div>
             <div className="suave">Solución: <b style={{ color: "var(--texto)" }}>{v.solucion?.respuestas?.[v.indice]}</b></div>
             {hoja?.valores[v.indice] && <div className="suave">Vosotros: {hoja.valores[v.indice]}</div>}
           </>

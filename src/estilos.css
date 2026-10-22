@@ -208,3 +208,6 @@ h1, h2, h3 { margin: 0; line-height: 1.1; }
 .mini-m.actual { outline: 2px solid #fff; }
 .mini-m.pend { opacity: 0.55; }
 .resultado-movil.nada { background: #0b0b0f; border: 1px solid #555; }
+.resultado-movil.medio { background: var(--oro); color: #241400; }
+.rosco .letra.medio { background: var(--oro); color: #241400; }
+.hoja.marca-medio { box-shadow: 0 0 0 4px var(--oro); }

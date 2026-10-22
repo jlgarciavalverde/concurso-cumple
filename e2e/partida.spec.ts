@@ -53,8 +53,10 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await foto(tv, "tv-revelar");
   await host.getByRole("button", { name: /Terminar ya/ }).click();
   await expect(tv.locator(".tabla-res")).toBeVisible();
-  await host.getByRole("button", { name: /Confirmar y sumar/ }).click();
-  await expect(tv.locator(".tv-eq").filter({ hasText: "Rojo" })).toContainText("1");
+  // marcador en directo: sin confirmar, rojo (1º en acertar) lleva 1,5 y azul 1,25
+  await expect(tv.locator(".tv-eq").filter({ hasText: "Rojo" })).toContainText("1,5");
+  await expect(tv.locator(".tv-eq").filter({ hasText: "Azul" })).toContainText("1,25");
+  await expect(host.getByText("Puntos automáticos, ya en el marcador")).toBeVisible();
 
   // --- Canción con pulsador
   await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
@@ -91,6 +93,9 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(rojo.getByText("¡Correcto!")).toBeVisible();
   await expect(azul.getByText("Fallo")).toBeVisible();
   await expect(amarillo.getByText("Sin responder")).toBeVisible();
+  // medio punto a mano para azul
+  await host.getByRole("row", { name: /Azul/ }).getByRole("button", { name: "Medio punto" }).click();
+  await expect(azul.getByText("Medio acierto")).toBeVisible();
   await expect(tv.locator(".revela")).toHaveText("Cazoleta");
   await foto(tv, "tv-rosco-revelar");
   await foto(amarillo, "movil-rosco-nada");
@@ -133,12 +138,14 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await foto(host, "host-tarjeta");
   await foto(tv, "tv-tarjeta");
 
-  // --- Torre de vasos con cronómetro
+  // --- Torre de vasos: cuenta atrás y vasos por equipo
   await host.locator(".host-nav").getByRole("button", { name: "Torre de vasos" }).click();
-  await host.getByRole("button", { name: /Cronómetro/ }).click();
-  await host.waitForTimeout(1200);
-  await host.getByRole("button", { name: "⏱️ Verde" }).click();
-  await expect(tv.locator(".tv-eq").filter({ hasText: "Verde" }).first()).toContainText(/1\.\d/);
+  await host.getByRole("button", { name: /Empezar cuenta atrás/ }).click();
+  await expect(tv.locator(".cuenta")).toBeVisible();
+  const vasos = host.getByRole("row", { name: /Verde/ }).getByRole("textbox");
+  await vasos.fill("12");
+  await vasos.press("Enter");
+  await expect(tv.locator(".tv-centro .tv-eq").filter({ hasText: "Verde" })).toContainText("12 vasos");
   await foto(tv, "tv-torre");
 
   // --- Marcador y podio
@@ -152,8 +159,9 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await foto(host, "host-general");
 
   // --- El estado sobrevive a recargar
+  const antes = (await rojo.locator(".movil-cab").textContent()) ?? "";
   await rojo.reload();
-  await expect(rojo.locator(".movil-cab")).toContainText("1 pts");
+  await expect(rojo.locator(".movil-cab")).toHaveText(antes);
 });
 
 test("admin: PIN, edición y guardado", async ({ page }) => {

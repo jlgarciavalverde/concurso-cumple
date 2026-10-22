@@ -1,5 +1,5 @@
 // Motor del concurso: estado + acciones del presentador y de los equipos. Sin E/S: el servidor persiste y emite.
-import { coincide, desglose, puntosPrecio, puntosPropuestos, puntosRapidez, totales } from "../shared/puntuacion.ts";
+import { BONUS_RAPIDEZ, coincide, desglose, puntosPrecio, puntosSub, puntosTest, totales } from "../shared/puntuacion.ts";
 import { porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo } from "../shared/tipos.ts";
 
 export type AccionHost =
@@ -12,7 +12,7 @@ export type AccionHost =
   | { t: "desconfirmar" }
   | { t: "limpiarSub" }
   | { t: "crudo"; equipo: EquipoId; valor: number | null }
-  | { t: "correccion"; equipo: EquipoId; item: number; ok: boolean }
+  | { t: "correccion"; equipo: EquipoId; item: number; puntos: number }
   | { t: "sonar"; on: boolean }
   | { t: "acierto" }
   | { t: "fallo" }
@@ -26,7 +26,7 @@ export type AccionHost =
   | { t: "reiniciar" }
   | { t: "codigo" }
   | { t: "vista"; v: Vista }
-  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv"; valor: number | boolean };
+  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez"; valor: number | boolean };
 
 export type AccionEquipo =
   | { t: "responder"; valor: number }
@@ -139,7 +139,7 @@ export class Juego {
       if (!pi || v.indice === 0) {
         v.hojas = {};
         for (const id of this.ids) v.hojas[id] = { valores: sub.items.map(() => ""), hechos: sub.items.map(() => false), entregada: false };
-        this.estado.correcciones[sub.id] = Object.fromEntries(this.ids.map((id) => [id, sub.items.map(() => false)]));
+        this.estado.correcciones[sub.id] = Object.fromEntries(this.ids.map((id) => [id, sub.items.map(() => 0)]));
       }
     }
     if (sub.tipo === "cancion") v.sonando = true;
@@ -152,8 +152,7 @@ export class Juego {
     v.fin = null;
     if (sub.tipo === "test") {
       const p = sub.preguntas[v.indice];
-      for (const [eq, r] of Object.entries(v.respuestas))
-        if (p && r.valor === p.correcta) this.sumar(sub.id, eq, sub.rapidez ? puntosRapidez(r.ms, sub.segundos) : 1);
+      if (p) for (const [eq, n] of Object.entries(puntosTest(v.respuestas, p.correcta, this.bonus(sub)))) this.sumar(sub.id, eq, n);
       for (const eq of this.ids) this.sumar(sub.id, eq, 0);
     } else if (sub.tipo === "precio") {
       const prod = sub.productos[v.indice];
@@ -165,9 +164,9 @@ export class Juego {
       const pi = porItem(sub);
       for (const eq of this.ids) {
         const h = v.hojas[eq];
-        const fila = (corr[eq] ??= sub.items.map(() => false));
+        const fila = (corr[eq] ??= sub.items.map(() => 0));
         sub.items.forEach((it, i) => {
-          if (!pi || i === v.indice) fila[i] = coincide(h?.valores[i] ?? "", it.respuesta);
+          if (!pi || i === v.indice) fila[i] = coincide(h?.valores[i] ?? "", it.respuesta) ? 1 : 0;
         });
         if (h && !pi) h.entregada = true;
       }
@@ -183,7 +182,11 @@ export class Juego {
   private recontar(subId: string) {
     const corr = this.estado.correcciones[subId] ?? {};
     const c = this.crudo(subId);
-    for (const eq of this.ids) c[eq] = (corr[eq] ?? []).filter(Boolean).length;
+    for (const eq of this.ids) c[eq] = Math.round((corr[eq] ?? []).reduce((t: number, x) => t + (Number(x) || 0), 0) * 100) / 100;
+  }
+
+  private bonus(sub: Extract<Sub, { tipo: "test" }>): number[] | null {
+    return sub.rapidez ? (sub.bonus ?? BONUS_RAPIDEZ) : null;
   }
 
   private siguienteTarjeta(sub: Extract<Sub, { tipo: "tarjetas" }>) {
@@ -261,6 +264,8 @@ export class Juego {
           this.siguienteTarjeta(sub);
         } else if (sub.tipo === "manual") {
           v.fase = "jugando";
+          v.abiertaEn = ahora;
+          v.fin = sub.segundos ? ahora + sub.segundos * 1000 : null;
         } else if (totalItems(sub) > 0) {
           this.abrir(sub);
         }
@@ -314,8 +319,8 @@ export class Juego {
       }
       case "correccion": {
         const fila = e.correcciones[sub.id]?.[acc.equipo];
-        if (!fila || acc.item < 0 || acc.item >= fila.length) return;
-        fila[acc.item] = acc.ok;
+        if (!fila || acc.item < 0 || acc.item >= fila.length || !Number.isFinite(acc.puntos)) return;
+        fila[acc.item] = Math.max(-10, Math.min(10, acc.puntos));
         this.recontar(sub.id);
         return;
       }
@@ -371,8 +376,9 @@ export class Juego {
       case "config": {
         const n = Math.round(Number(acc.valor));
         if (acc.campo === "segundosItem" && sub.tipo === "adivinar" && n >= 0 && n <= 600) sub.segundosItem = n;
-        if (acc.campo === "segundos" && "segundos" in sub && n >= 0 && n <= 600) sub.segundos = n;
+        if (acc.campo === "segundos" && sub.tipo !== "cancion" && n >= 0 && n <= 600) sub.segundos = n;
         if (acc.campo === "tarjetaEnTv" && sub.tipo === "tarjetas") sub.tarjetaEnTv = !!acc.valor;
+        if (acc.campo === "rapidez" && sub.tipo === "test") sub.rapidez = !!acc.valor;
         return;
       }
       case "mas":
@@ -467,7 +473,7 @@ export class Juego {
     base.sub = { id: sub.id, tipo: sub.tipo, titulo: sub.titulo, descripcion: sub.descripcion, pruebaTitulo: prueba.titulo, emoji: prueba.emoji, total: totalItems(sub) };
     base.crudo = e.crudo[sub.id] ?? {};
     base.confirmado = !!e.puntos[sub.id];
-    base.ranking = e.puntos[sub.id] ?? puntosPropuestos(sub, base.crudo, this.ids, this.contenido.tabla);
+    base.ranking = puntosSub(sub, e, this.ids, this.contenido.tabla) ?? Object.fromEntries(this.ids.map((id) => [id, 0]));
 
     if (sub.tipo === "test") {
       base.sub.puntuacion = sub.puntuacion;
@@ -477,6 +483,8 @@ export class Juego {
         if (v.fase === "revelar") {
           base.solucion = { correcta: p.correcta };
           base.respuestasVisibles = Object.fromEntries(Object.entries(v.respuestas).map(([k, r]) => [k, r.valor]));
+          const b = this.bonus(sub);
+          if (b) base.bonus = Object.fromEntries(Object.entries(puntosTest(v.respuestas, p.correcta, b)).filter(([, n]) => n > 1).map(([k, n]) => [k, n - 1]));
         }
       }
     } else if (sub.tipo === "precio") {
@@ -503,7 +511,14 @@ export class Juego {
         base.hojas[eq] = {
           entregada: !!h?.entregada,
           contestadas: h ? h.valores.filter((x) => x.trim()).length : 0,
-          marcas: sub.items.map((_, i): Marca => (!corregido(i) ? null : !h?.valores[i]?.trim() ? "nada" : ok?.[i] ? "ok" : "ko")),
+          marcas: sub.items.map((_, i): Marca => {
+            const n = Number(ok?.[i]) || 0;
+            if (!corregido(i)) return null;
+            if (n >= 1) return "ok";
+            if (n > 0) return "medio";
+            return h?.valores[i]?.trim() ? "ko" : "nada";
+          }),
+          puntos: sub.items.map((_, i) => (corregido(i) ? Number(ok?.[i]) || 0 : 0)),
           valores: sub.items.map((_, i) => (corregido(i) ? (h?.valores[i] ?? "") : "")),
         };
       }
