@@ -1,7 +1,9 @@
 // Pulsador justo con red real: un móvil con datos (150 ms) pulsa ANTES que uno en wifi, pero su pulsación llega después.
 import { createServer, connect, type Server } from "node:net";
 import { expect, test } from "@playwright/test";
-import { nuevaPagina, nuevaTv, opcionesMovil } from "./util.ts";
+import { nuevaPagina, nuevaTv, opcionesMovil, ganchos } from "./util.ts";
+
+ganchos();
 
 /** Proxy TCP que retrasa cada trozo de datos `ms` en cada sentido: una red móvil lenta de verdad (también el WebSocket). */
 function proxyLento(puerto: number, destino: number, ms: number): Server {

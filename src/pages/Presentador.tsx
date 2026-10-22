@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icono } from "../components/iconos.tsx";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
+import { revisarSub } from "../../shared/revision.ts";
 import { fragmento, porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
 import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS, fmt, gruposPodio } from "../components/comun.tsx";
@@ -206,22 +207,7 @@ function textoFase(h: VistaHost, sub: Sub): string {
 
 /** Aviso si la subprueba tiene campos con el lápiz de plantilla sin rellenar (saldrían tal cual en la TV). */
 function Pendientes({ sub }: { sub: Sub }) {
-  const n = (JSON.stringify(sub).match(/✏️/g) ?? []).length;
-  const avisos: string[] = [];
-  if (n) avisos.push(`${n} campo${n > 1 ? "s" : ""} de plantilla sin rellenar (marcados con un lápiz): saldrían así en la TV`);
-  if (sub.tipo === "precio") {
-    const sinPrecio = sub.productos.filter((x) => !x.precio).length;
-    if (sinPrecio) avisos.push(`${sinPrecio} producto${sinPrecio > 1 ? "s" : ""} con precio 0`);
-  }
-  if (sub.tipo === "cancion") {
-    const sinAudio = sub.canciones.filter((x) => !x.audio).length;
-    if (sinAudio) avisos.push(`${sinAudio} de ${sub.canciones.length} canciones sin MP3 (tendrías que ponerlas tú aparte)`);
-  }
-  if (sub.tipo === "adivinar") {
-    const sinSol = sub.items.filter((x) => !x.respuesta.trim()).length;
-    if (sinSol) avisos.push(`${sinSol} sin solución: no se podrán corregir solas`);
-  }
-  if ((sub.tipo === "test" || sub.tipo === "tarjetas") && !(sub.tipo === "test" ? sub.preguntas : sub.tarjetas).length) avisos.push("no tiene contenido");
+  const avisos = revisarSub(sub);
   if (!avisos.length) return null;
   return (
     <div className="error">

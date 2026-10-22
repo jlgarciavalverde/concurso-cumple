@@ -2,7 +2,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil } from "./util.ts";
+import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil, ganchos } from "./util.ts";
+
+ganchos();
 
 const PUERTO = 3460;
 const URL = `http://localhost:${PUERTO}`;

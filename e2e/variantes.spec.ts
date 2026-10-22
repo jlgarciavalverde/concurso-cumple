@@ -1,6 +1,8 @@
 // Estados raros vistos de verdad en la TV, los móviles y el panel (con capturas para revisar).
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil } from "./util.ts";
+import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil, ganchos } from "./util.ts";
+
+ganchos();
 
 const foto = (p: Page, n: string) => fotoBase(p, "var-" + n);
 const PIN = { "x-pin": "1234" };

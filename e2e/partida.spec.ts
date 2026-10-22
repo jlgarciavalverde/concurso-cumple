@@ -1,5 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { foto as fotoBase, FOTOS, nuevaPagina, nuevaTv, opcionesMovil, vigilar } from "./util.ts";
+import { foto as fotoBase, FOTOS, nuevaPagina, nuevaTv, opcionesMovil, vigilar, ganchos } from "./util.ts";
+
+ganchos();
 
 const foto = (p: Page, n: string) => fotoBase(p, "" + n);
 
@@ -236,27 +238,71 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(rojo.locator(".movil-cab")).toHaveText(antes);
 });
 
-test("admin: PIN, edición y guardado", async ({ page }) => {
+test("admin: guía, lo que falta, guardado automático, «Empezar aquí» y conflictos", async ({ page, request }) => {
   vigilar(page, "admin");
+  const h = { "x-pin": "1234" };
+  // Una canción con MP3 para probar «Empezar aquí»
+  const { url } = await (await request.post("/api/admin/subir", { headers: h, multipart: { archivo: { name: "p.wav", mimeType: "audio/wav", buffer: wav(3) } } })).json();
+  const c0 = await (await request.get("/api/admin/contenido", { headers: h })).json();
+  c0.pruebas.flatMap((x: { subs: { id: string }[] }) => x.subs).find((x: { id: string }) => x.id === "c-rap").canciones[0].audio = url;
+  await request.put("/api/admin/contenido", { headers: h, data: c0 });
+
   await page.goto("/admin");
   await page.getByPlaceholder("PIN").fill("0000");
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByText("PIN incorrecto")).toBeVisible();
   await page.getByPlaceholder("PIN").fill("1234");
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByText(/Quedan \d+ campos/)).toBeVisible();
-  await page.getByText("¿Cuánto cuesta?").click();
-  await page.locator('details[open] input[value="✏️ Producto 1"]').fill("Cachimba Kaloud");
-  await page.getByRole("button", { name: "Guardar" }).click();
-  await expect(page.getByText("Guardado", { exact: true })).toBeVisible();
-  await page.reload();
-  await page.getByText("¿Cuánto cuesta?").click();
-  await expect(page.locator('details[open] input[value="Cachimba Kaloud"]')).toHaveCount(1);
-  await foto(page, "admin");
+  await expect(page.getByRole("heading", { name: "Preparar el concurso" })).toBeVisible();
+  await expect(page.getByText(/Faltan \d+ de \d+ rondas/)).toBeVisible();
+  await expect(page.locator(".preparacion")).toContainText("cachimbas o boles");
+  await foto(page, "admin-portada");
 
-  // Guardar sobre una versión vieja del contenido devuelve 409 (no machaca cambios hechos en directo)
-  const h = { "x-pin": "1234" };
-  const c = await (await page.request.get("/api/admin/contenido", { headers: h })).json();
-  expect((await page.request.put("/api/admin/contenido", { headers: h, data: c })).status()).toBe(200);
-  expect((await page.request.put("/api/admin/contenido", { headers: h, data: c })).status()).toBe(409);
+  // Desde «¿Está todo listo?» se va directo a la ronda, con su guía
+  const filaPrecio = page.locator(".fila-revision").filter({ hasText: "¿Cuánto cuesta?" });
+  await expect(filaPrecio).toContainText("6 productos con precio 0");
+  await filaPrecio.click();
+  const precio = page.locator("#ronda-precio");
+  await expect(precio.getByText("Cómo se juega el día")).toBeVisible();
+  await expect(precio.getByText("Falta rellenar").first()).toBeVisible();
+  await precio.getByPlaceholder("Producto 1").fill("Cachimba Kaloud");
+  await precio.locator(".campo-admin").filter({ hasText: "Precio real en euros" }).first().locator("input").fill("120");
+  await expect(page.getByText(/Guardado ahora/)).toBeVisible({ timeout: 8000 });
+  await expect(filaPrecio).toContainText("5 productos con precio 0");
+  await foto(page, "admin-precio");
+
+  // Kahoot: aceptar una pregunta de ejemplo con un clic
+  await page.locator(".fila-revision").filter({ hasText: "¿Cuánto le conocéis?" }).click();
+  await page.locator("#ronda-kahoot").getByRole("button", { name: /Usar «¿En qué año nació el cumpleañero\?»/ }).click();
+  await expect(page.locator("#ronda-kahoot textarea").first()).toHaveValue("¿En qué año nació el cumpleañero?");
+  await foto(page, "admin-kahoot");
+
+  // Canción: «Empezar aquí» copia el segundo en que está el reproductor
+  await page.locator(".fila-revision").filter({ hasText: "Rap español" }).click();
+  const rap = page.locator("#ronda-c-rap");
+  const audio = rap.locator("audio").first();
+  await audio.evaluate(async (a: HTMLAudioElement) => {
+    if (a.readyState < 1) await new Promise((r) => a.addEventListener("loadedmetadata", r, { once: true }));
+    a.currentTime = 2.4;
+  });
+  await rap.getByRole("button", { name: "Empezar aquí" }).first().click();
+  await expect(rap.locator(".campo-admin").filter({ hasText: "Empieza a sonar en el segundo" }).first().locator("input")).toHaveValue("2");
+  await expect(page.getByText(/Guardado ahora/)).toBeVisible({ timeout: 8000 });
+
+  // Todo sigue tras recargar
+  await page.reload();
+  await page.locator(".fila-revision").filter({ hasText: "¿Cuánto cuesta?" }).click();
+  await expect(page.locator("#ronda-precio input[value=\"Cachimba Kaloud\"]")).toHaveCount(1);
+
+  // Conflicto: alguien cambia el contenido por otro lado y aquí se avisa en vez de machacarlo
+  const actual = await (await request.get("/api/admin/contenido", { headers: h })).json();
+  expect((await request.put("/api/admin/contenido", { headers: h, data: actual })).status()).toBe(200);
+  await page.locator("#ronda-precio").getByPlaceholder("Producto 2").fill("Botella");
+  await expect(page.getByText(/Alguien ha cambiado el contenido/)).toBeVisible({ timeout: 8000 });
+  await foto(page, "admin-conflicto");
+
+  // En móvil también se usa bien
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await foto(page, "admin-movil");
 });

@@ -75,6 +75,12 @@ const TRAZOS = {
     </>
   ),
   rayo: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 11v6M12 7.5v.5" />
+    </>
+  ),
 } as const;
 
 export type NombreIcono = keyof typeof TRAZOS;

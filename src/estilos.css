@@ -326,3 +326,49 @@ h3 { font-size: 1.25em; }
 .podio .peana .pos small, .clasif-pos small { font-family: var(--cond); font-weight: 700; font-size: 0.4em; vertical-align: 0.9em; margin-left: 0.04em; }
 .ofertas { display: grid; grid-template-columns: repeat(2, minmax(0, 38vw)); gap: 2vh 2vw; }
 .ofertas .tv-eq { justify-content: space-between; }
+
+/* ---------- Admin (preparar el concurso) ---------- */
+.admin { max-width: 1000px; margin: 0 auto; padding: 12px 16px 60px; display: flex; flex-direction: column; gap: 16px; }
+.barra-admin { position: sticky; top: 8px; z-index: 10; justify-content: space-between; box-shadow: var(--sombra); }
+.estado-guardado { font-size: 0.9em; color: var(--suave); display: inline-flex; gap: 6px; align-items: center; }
+.estado-guardado.guardado { color: var(--ok); }
+.estado-guardado.error { color: var(--ko); }
+.bienvenida p { margin: 0; line-height: 1.5; }
+.lista-revision { display: flex; flex-direction: column; gap: 6px; }
+.fila-revision { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 4px; border: 2px solid var(--borde); background: var(--bg2); }
+.fila-revision:hover { border-color: var(--bombilla); }
+.fila-revision.con-falta { border-left: 6px solid var(--bombilla); }
+.fila-revision.lista { border-left: 6px solid var(--ok); }
+.fila-revision.con-falta .fila-revision-estado { color: var(--bombilla); }
+.fila-revision.lista .fila-revision-estado { color: var(--ok); }
+.fila-revision-estado { font-size: 0.92em; }
+.preparacion { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
+.prueba-admin { gap: 10px; }
+.titulo-prueba { flex: 1; font-family: var(--titular); font-size: 1.25em; text-transform: uppercase; letter-spacing: 0.02em; }
+.ronda { padding: 0; }
+.ronda > summary { list-style: none; }
+.ronda > summary::-webkit-details-marker { display: none; }
+.ronda-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; cursor: pointer; }
+.ronda[open] .ronda-cab { border-bottom: 2px solid var(--borde); }
+.ronda > div { padding: 0 16px 16px; }
+.estado-falta { margin-left: auto; font-size: 0.85em; color: var(--tinta); background: var(--bombilla); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+.estado-listo { margin-left: auto; font-size: 0.85em; color: var(--ok); font-weight: 700; display: inline-flex; gap: 4px; align-items: center; }
+.opcion-admin .estado-listo { margin-left: 0; }
+.guia { background: #0f2a4a; border: 2px solid #2b62d9; border-radius: 4px; padding: 10px 14px; }
+.guia summary { cursor: pointer; font-weight: 700; display: flex; gap: 6px; align-items: center; color: #8fb3ff; }
+.guia dl { margin: 10px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; line-height: 1.45; }
+.guia dt { font-family: var(--cond); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.85em; color: #8fb3ff; padding-top: 2px; }
+.guia dd { margin: 0; }
+.campo-etiqueta { font-family: var(--cond); font-weight: 700; font-size: 0.95em; letter-spacing: 0.02em; }
+.campo-ayuda { font-size: 0.82em; color: var(--suave); }
+.campo.falta { border-color: var(--bombilla); background: #1f1a08; }
+.falta-aviso { font-size: 0.82em; color: var(--bombilla); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.opcion-admin { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 4px; border: 2px solid transparent; }
+.opcion-admin.buena { border-color: var(--ok); background: #0d2a1d; }
+.avanzados > summary { cursor: pointer; color: var(--suave); font-size: 0.92em; }
+@media (max-width: 700px) {
+  .fila-revision { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .fila-revision-estado { grid-column: 2 / 3; }
+  .guia dl { grid-template-columns: 1fr; }
+  .opcion-admin { flex-wrap: wrap; }
+}
