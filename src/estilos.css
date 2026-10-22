@@ -322,3 +322,7 @@ h3 { font-size: 1.25em; }
 .tarjeta-preg.tv-pregunta { padding: 2.4vh 3vw; }
 .clasif-pos small { font-size: 0.5em; vertical-align: top; }
 @media (max-width: 820px) { .atajos { display: none; } }
+/* El «º» de Anton parece un cero volado: en Barlow se lee como ordinal */
+.podio .peana .pos small, .clasif-pos small { font-family: var(--cond); font-weight: 700; font-size: 0.4em; vertical-align: 0.9em; margin-left: 0.04em; }
+.ofertas { display: grid; grid-template-columns: repeat(2, minmax(0, 38vw)); gap: 2vh 2vw; }
+.ofertas .tv-eq { justify-content: space-between; }

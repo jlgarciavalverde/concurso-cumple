@@ -215,3 +215,28 @@ export function totales(contenido: Contenido, estado: Estado): Record<EquipoId, 
   for (const f of desglose(contenido, estado)) for (const id in out) out[id] += f.puntos[id] ?? 0;
   return out;
 }
+
+/**
+ * Lee un precio escrito a mano: «12», «12,5», «12.50», «1.000», «1.000,50», «1 000 €», «1,000.50».
+ * Devuelve null si no es un número válido (texto, negativo, vacío).
+ */
+export function leerPrecio(txt: string): number | null {
+  let t = txt.replace(/€|eur(os)?/gi, "").replace(/\s+/g, "").trim();
+  if (!t || !/^[\d.,]+$/.test(t)) return null;
+  const coma = t.lastIndexOf(",");
+  const punto = t.lastIndexOf(".");
+  if (coma >= 0 && punto >= 0) {
+    // El último separador es el decimal: «1.000,50» o «1,000.50»
+    const dec = coma > punto ? "," : ".";
+    t = t.split(dec === "," ? "." : ",").join("").replace(dec, ".");
+  } else if (coma >= 0 || punto >= 0) {
+    const sep = coma >= 0 ? "," : ".";
+    const partes = t.split(sep);
+    // «1.000» / «12.000.000»: grupos de 3 cifras = miles; si no, es decimal («12,5», «12.50»)
+    const miles = partes.length > 2 || (partes[1].length === 3 && partes[0].length >= 1 && partes[0] !== "0");
+    t = miles ? partes.join("") : partes.join(".");
+    if (partes.length > 2 && !partes.slice(1).every((p) => p.length === 3)) return null;
+  }
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}

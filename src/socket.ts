@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Oyente = (d: any) => void;
+
 /** Conexión en tiempo real. `desfase` = reloj del servidor − reloj local (para las cuentas atrás). */
-export function useCanal<T extends { ahora: number }>(auth: Record<string, string> | null, evento: string, otros?: Record<string, () => void>) {
+export function useCanal<T extends { ahora: number }>(auth: Record<string, string> | null, evento: string, otros?: Record<string, Oyente>) {
   const [datos, setDatos] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conectado, setConectado] = useState(false);

@@ -59,6 +59,9 @@ export const vivoVacio = (): Vivo => ({
   cronometro: { desde: null, acumulado: 0 },
 });
 
+/** Un «Acierto» pulsado hasta 2 s después de la bocina todavía cuenta. */
+const MARGEN_ACIERTO = 2000;
+
 export function nuevoCodigo(): string {
   const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   return Array.from({ length: 4 }, () => letras[Math.floor(Math.random() * letras.length)]).join("");
@@ -198,6 +201,7 @@ export class Juego {
       v.sonando = true;
     } else if (sub.tipo === "tarjetas") {
       v.tarjeta = -1;
+      v.cerradoEn = this.reloj();
     }
   }
 
@@ -410,6 +414,9 @@ export class Juego {
         if (sub.tipo === "tarjetas" && v.turno && v.fase === "jugando") {
           this.sumar(sub.id, v.turno, 1);
           this.siguienteTarjeta(sub);
+        } else if (sub.tipo === "tarjetas" && v.turno && v.fase === "revelar" && ahora - (v.cerradoEn ?? 0) <= MARGEN_ACIERTO) {
+          // Acertaron justo cuando sonó la bocina: el punto cuenta
+          this.sumar(sub.id, v.turno, 1);
         }
         return;
       case "fallo":
@@ -468,13 +475,44 @@ export class Juego {
   }
 
   /** Un equipo se pone nombre desde su móvil. Devuelve true si cambió (hay que guardar el contenido). */
-  renombrar(eq: EquipoId, nombre: unknown): boolean {
+  renombrar(eq: EquipoId, nombre: unknown): boolean | "repetido" {
     const n = String(nombre ?? "").replace(/\s+/g, " ").trim().slice(0, 20);
     const e = this.contenido.equipos.find((x) => x.id === eq);
     if (!e || !n || n === e.nombre) return false;
+    if (this.contenido.equipos.some((x) => x.id !== eq && x.nombre.toLocaleLowerCase("es") === n.toLocaleLowerCase("es"))) return "repetido";
     e.nombre = n;
     this.contenido.rev = (this.contenido.rev ?? 0) + 1;
     return true;
+  }
+
+  /**
+   * Tras editar el contenido en mitad de la partida (borrar preguntas, tarjetas…): que el estado en vivo
+   * no apunte a cosas que ya no existen.
+   */
+  ajustarAlContenido() {
+    const v = this.estado.vivo;
+    const a = this.actual;
+    if (v.subId && !a) {
+      this.estado.vivo = { ...vivoVacio(), vista: v.vista };
+      return;
+    }
+    if (!a) return;
+    const { sub } = a;
+    const total = totalItems(sub);
+    if (sub.tipo !== "tarjetas" && sub.tipo !== "manual" && v.indice >= total) {
+      v.indice = Math.max(0, total - 1);
+      if (total === 0) Object.assign(v, { fase: "intro", fin: null });
+    }
+    if (sub.tipo === "tarjetas" && v.tarjeta >= sub.tarjetas.length) v.tarjeta = -1;
+    if (sub.tipo === "adivinar") {
+      const n = sub.items.length;
+      const ajustar = <T,>(xs: T[], relleno: T) => xs.slice(0, n).concat(Array(Math.max(0, n - xs.length)).fill(relleno));
+      for (const h of Object.values(v.hojas)) {
+        h.valores = ajustar(h.valores, "");
+        h.hechos = ajustar(h.hechos ?? [], false);
+      }
+      for (const fila of Object.entries(this.estado.correcciones[sub.id] ?? {})) this.estado.correcciones[sub.id][fila[0]] = ajustar(fila[1], 0);
+    }
   }
 
   /** Acción de un equipo. Devuelve true si cambió el estado. */

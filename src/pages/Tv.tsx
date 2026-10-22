@@ -2,7 +2,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Publico } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
-import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, FORMAS, gruposPodio, ponerVolumen, posRosco, probarSonido, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
+import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, euros, FORMAS, gruposPodio, ponerVolumen, posRosco, probarSonido, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
 import { Icono, Insignia } from "../components/iconos.tsx";
 import { useCanal } from "../socket.ts";
 
@@ -279,7 +279,6 @@ function Test({ p, desfase }: { p: Publico; desfase: number }) {
   );
 }
 
-const euros = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 
 function Precio({ p, desfase }: { p: Publico; desfase: number }) {
   const q = p.pregunta;
@@ -302,7 +301,7 @@ function Precio({ p, desfase }: { p: Publico; desfase: number }) {
       ) : (
         <>
           <div className="revela">{euros(precio)}</div>
-          <div className="fila" style={{ gap: "2vw", justifyContent: "center" }}>
+          <div className="ofertas">
             {ofertas.map(({ e, v }) => (
               <div key={e.id} className={`tv-eq ${p.ganadores?.includes(e.id) ? "on" : ""}`} style={conColor(e.color)}>
                 <span>{p.ganadores?.includes(e.id) && <Icono n="trofeo" />} {e.nombre}&nbsp;</span>
@@ -670,7 +669,15 @@ function Podio({ p, suena }: { p: Publico; suena: boolean }) {
     } else if (suena) sonidos.redoble();
   }, [paso]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const nombres = ganadores.map((id) => equipoDe(p, id)?.nombre).join(" y ");
+  const lista = ganadores.map((id) => equipoDe(p, id)?.nombre ?? "");
+  const nombres = lista.length > 1 ? `${lista.slice(0, -1).join(", ")} y ${lista.at(-1)}` : lista[0];
+  if (p.equipos.every((e) => !e.total))
+    return (
+      <>
+        <div className="tv-titulo">Aún no hay puntos</div>
+        <div className="tv-sub">El podio se llena cuando se jueguen las pruebas</div>
+      </>
+    );
   return (
     <>
       <div className="tv-titulo">{ganadores.length ? `🏆 ¡${nombres} ${ganadores.length > 1 ? "ganan" : "gana"}!` : paso ? "Y el siguiente puesto es…" : "¿Quién ganará?"}</div>

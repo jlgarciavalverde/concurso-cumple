@@ -188,3 +188,5 @@ export async function probarSonido(): Promise<boolean> {
     return false;
   }
 }
+
+export const euros = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });

@@ -120,7 +120,10 @@ const sabores = [
   "Pistacho", "Cola", "Maracuyá", "Lima", "Pera", "Frambuesa", "Naranja", "Vainilla",
 ];
 
-export const contenidoInicial = (): Contenido => ({
+// Copia profunda: cada llamada da un contenido independiente (las listas de arriba son compartidas)
+export const contenidoInicial = (): Contenido => structuredClone(base());
+
+const base = (): Contenido => ({
   titulo: "El Concurso del Cumple",
   tabla: [10, 5, 3, 1],
   equipos: [

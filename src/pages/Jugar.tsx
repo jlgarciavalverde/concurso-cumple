@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Icono, Insignia, ICONOS, type NombreIcono } from "../components/iconos.tsx";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
-import { conColor, Cuenta, equipoDe, FORMAS, gruposPodio, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
+import { leerPrecio } from "../../shared/puntuacion.ts";
+import { conColor, Cuenta, equipoDe, euros, FORMAS, gruposPodio, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
 
 export function Jugar() {
@@ -12,7 +13,18 @@ export function Jugar() {
   const [enviado, setEnviado] = useState(codigo.length === 4);
   const [nombrando, setNombrando] = useState(false);
   const auth = enviado ? { rol: "equipo", codigo, equipo } : null;
-  const { datos, error, conectado, desfase, enviar } = useCanal<VistaEquipo | Publico>(auth, "equipo");
+  const [aviso, setAviso] = useState<string | null>(null);
+  const { datos, error, conectado, desfase, enviar } = useCanal<VistaEquipo | Publico>(auth, "equipo", {
+    aviso: (m: string) => {
+      setAviso(m);
+      setNombrando(true);
+    },
+  });
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   useEffect(() => {
     if (!url) return;
@@ -79,6 +91,7 @@ export function Jugar() {
   const v = datos as VistaEquipo;
   return (
     <div className="movil">
+      {aviso && <div className="error" role="alert">{aviso}</div>}
       {!conectado && <div className="banda-conexion"><Icono n="recargar" /> Reconectando… no cerréis la página</div>}
       <Avisos v={v} />
       <div className="movil-cab" style={{ background: yo.color }}>
@@ -266,11 +279,12 @@ function PrecioMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; 
     return (
       <>
         <div className="espera">{v.pregunta?.texto}</div>
-        <div className="resultado-movil bien">Precio: {v.solucion?.precio} €</div>
-        <div className="espera suave">Vosotros: {mia ?? "—"} €</div>
+        <div className="resultado-movil bien">Precio: {euros(v.solucion?.precio ?? 0)}</div>
+        <div className="espera suave">Vosotros: {mia === undefined ? "sin respuesta" : euros(mia)}</div>
+        {v.ganadores?.includes(v.yo) && <div className="resultado-movil medio"><Icono n="trofeo" /> ¡El más cercano! +1</div>}
       </>
     );
-  const n = Number(txt.replace(",", "."));
+  const n = leerPrecio(txt);
   return (
     <>
       <div className="fila" style={{ justifyContent: "space-between" }}>
@@ -281,13 +295,14 @@ function PrecioMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; 
         className="col"
         onSubmit={(e) => {
           e.preventDefault();
-          if (txt && Number.isFinite(n)) enviar({ t: "responder", valor: n });
+          if (n !== null) enviar({ t: "responder", valor: n });
         }}
       >
-        <input className="campo" style={{ fontSize: "2.2em", textAlign: "center" }} inputMode="decimal" placeholder="0,00 €" value={txt} onChange={(e) => setTxt(e.target.value.replace(/[^0-9.,]/g, ""))} />
-        <button className="btn prim grande" disabled={!txt || !Number.isFinite(n)}>{mia === undefined ? "Enviar precio" : "Cambiar precio"}</button>
+        <input className="campo" style={{ fontSize: "2.2em", textAlign: "center" }} inputMode="decimal" placeholder="0,00 €" value={txt} onChange={(e) => setTxt(e.target.value.replace(/[^0-9.,\s€]/g, ""))} />
+        <div className="espera suave" style={{ minHeight: "1.4em", fontSize: "1em" }}>{txt ? (n === null ? "Escribe solo el número, p. ej. 12,50" : `= ${euros(n)}`) : ""}</div>
+        <button className="btn prim grande" disabled={n === null}>{mia === undefined ? "Enviar precio" : "Cambiar precio"}</button>
       </form>
-      {mia !== undefined && <div className="espera suave">Enviado: {mia} € (podéis cambiarlo hasta que acabe el tiempo)</div>}
+      {mia !== undefined && <div className="espera suave">Enviado: {euros(mia)} (podéis cambiarlo hasta que acabe el tiempo)</div>}
     </>
   );
 }

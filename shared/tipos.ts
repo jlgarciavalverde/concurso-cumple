@@ -103,6 +103,7 @@ export interface Vivo {
   acertante?: EquipoId | null; // canción: quién la acertó
   podioPaso?: number; // podio: cuántos puestos se han revelado (empezando por el último)
   repetir?: number; // canción: sube cada vez que el presentador repite el fragmento
+  cerradoEn?: number; // tarjetas: cuándo acabó el turno (un acierto justo al final aún cuenta)
   // tarjetas y manual
   turno: EquipoId | null;
   tarjeta: number; // índice global de tarjeta

@@ -83,13 +83,17 @@ app.put("/api/admin/contenido", async (req, reply) => {
     return reply.code(409).send({ error: "El contenido ha cambiado desde que abriste esta página (p. ej. el presentador cambió algo en directo). Recarga y vuelve a hacer tus cambios." });
   nuevo.rev = actual + 1;
   juego.contenido = nuevo;
+  juego.ajustarAlContenido();
   escribir(fContenido, juego.contenido);
+  guardar();
   emitir();
   return { ok: true, rev: nuevo.rev };
 });
 app.post("/api/admin/restaurar", async () => {
   juego.contenido = { ...contenidoInicial(), rev: (juego.contenido.rev ?? 0) + 1 };
+  juego.ajustarAlContenido();
   escribir(fContenido, juego.contenido);
+  guardar();
   emitir();
   return juego.contenido;
 });
@@ -225,7 +229,10 @@ io.on("connection", (socket) => {
       socket.join(`eq:${eq}`);
       let ultima = 0;
       socket.on("nombre", (nombre: unknown) => {
-        if (juego.estado.codigo !== codigo || !juego.renombrar(eq, nombre)) return;
+        if (juego.estado.codigo !== codigo) return;
+        const r = juego.renombrar(eq, nombre);
+        if (r === "repetido") socket.emit("aviso", "Ese nombre ya lo tiene otro equipo");
+        if (r !== true) return;
         escribir(fContenido, juego.contenido);
         emitir();
       });

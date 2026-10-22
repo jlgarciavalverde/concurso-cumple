@@ -201,10 +201,29 @@ function textoFase(h: VistaHost, sub: Sub): string {
 /** Aviso si la subprueba tiene campos con el lápiz de plantilla sin rellenar (saldrían tal cual en la TV). */
 function Pendientes({ sub }: { sub: Sub }) {
   const n = (JSON.stringify(sub).match(/✏️/g) ?? []).length;
-  if (!n) return null;
+  const avisos: string[] = [];
+  if (n) avisos.push(`${n} campo${n > 1 ? "s" : ""} de plantilla sin rellenar (marcados con un lápiz): saldrían así en la TV`);
+  if (sub.tipo === "precio") {
+    const sinPrecio = sub.productos.filter((x) => !x.precio).length;
+    if (sinPrecio) avisos.push(`${sinPrecio} producto${sinPrecio > 1 ? "s" : ""} con precio 0`);
+  }
+  if (sub.tipo === "cancion") {
+    const sinAudio = sub.canciones.filter((x) => !x.audio).length;
+    if (sinAudio) avisos.push(`${sinAudio} de ${sub.canciones.length} canciones sin MP3 (tendrías que ponerlas tú aparte)`);
+  }
+  if (sub.tipo === "adivinar") {
+    const sinSol = sub.items.filter((x) => !x.respuesta.trim()).length;
+    if (sinSol) avisos.push(`${sinSol} sin solución: no se podrán corregir solas`);
+  }
+  if ((sub.tipo === "test" || sub.tipo === "tarjetas") && !(sub.tipo === "test" ? sub.preguntas : sub.tarjetas).length) avisos.push("no tiene contenido");
+  if (!avisos.length) return null;
   return (
     <div className="error">
-      <Icono n="aviso" /> Esta prueba tiene {n} campo{n > 1 ? "s" : ""} de plantilla sin rellenar (marcados con un lápiz): saldrían así en la TV. <a href="/admin" style={{ color: "var(--oro)" }}>Rellenar en /admin</a>
+      <b><Icono n="aviso" /> Antes de empezar:</b>
+      <ul style={{ margin: "6px 0 6px 18px", padding: 0 }}>
+        {avisos.map((x) => <li key={x}>{x}</li>)}
+      </ul>
+      <a href="/admin" style={{ color: "var(--oro)" }}>Arreglarlo en /admin</a>
     </div>
   );
 }
@@ -708,6 +727,7 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
 function PodioControl({ h, a }: { h: VistaHost; a: A }) {
   const grupos = gruposPodio(h.publico.equipos);
   const paso = h.publico.podioPaso;
+  if (h.publico.equipos.every((e) => !e.total)) return <div className="chip" style={{ width: "100%" }}>Aún no hay puntos: el podio está vacío</div>;
   if (paso >= grupos.length) return <div className="chip" style={{ width: "100%" }}><Icono n="trofeo" /> Ganador revelado. <button className="btn peq" onClick={() => a({ t: "vista", v: "podio" })}>Repetir el final</button></div>;
   const sig = grupos[paso];
   const empate = sig.ids.length > 1 ? ` (empate de ${sig.ids.length})` : "";
