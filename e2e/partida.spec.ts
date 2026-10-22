@@ -207,6 +207,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(tv.getByText("¿Quién ganará?")).toBeVisible();
   await expect(tv.locator(".peana.vista")).toHaveCount(0);
   await foto(tv, "tv-podio-0");
+  await expect(host.getByRole("button", { name: /Revelar el \d+º puesto/ })).toBeVisible();
   await host.keyboard.press(" ");
   await expect(tv.locator(".peana.vista").first()).toBeVisible();
   for (let i = 0; i < 4 && (await tv.locator(".con-confeti").count()) === 0; i++) await host.keyboard.press(" ");
