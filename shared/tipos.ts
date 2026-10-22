@@ -104,6 +104,8 @@ export interface Vivo {
   podioPaso?: number; // podio: cuántos puestos se han revelado (empezando por el último)
   repetir?: number; // canción: sube cada vez que el presentador repite el fragmento
   cerradoEn?: number; // tarjetas: cuándo acabó el turno (un acierto justo al final aún cuenta)
+  // canción: el primer pulsador abre una ventana corta; gana quien pulsó antes de verdad (llegada − latencia)
+  ventana?: { hasta: number; candidatos: Record<EquipoId, number> } | null;
   // tarjetas y manual
   turno: EquipoId | null;
   tarjeta: number; // índice global de tarjeta
@@ -205,6 +207,7 @@ export interface VistaHost {
   conectados: Record<EquipoId, number>;
   tv: number;
   tvSonido: boolean | null; // ¿la TV puede sonar? (null: no lo ha dicho / sin TV)
+  latencias: Record<EquipoId, number>; // ms (mitad del ida y vuelta) del mejor móvil de cada equipo
   deshacer: number;
 }
 

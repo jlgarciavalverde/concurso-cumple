@@ -41,7 +41,7 @@ describe("reglas", () => {
 function partida() {
   let ahora = 1_000_000;
   const c = contenidoInicial();
-  const j = new Juego(c, estadoVacio(), () => ahora);
+  const j = new Juego(c, estadoVacio(), () => ahora, 0);
   return { j, c, avanza: (ms: number) => (ahora += ms) };
 }
 

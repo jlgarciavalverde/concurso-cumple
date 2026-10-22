@@ -1,12 +1,12 @@
 // Estados raros vistos de verdad en la TV, los móviles y el panel (con capturas para revisar).
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil } from "./util.ts";
 
-const FOTOS = process.env.FOTOS;
-const foto = async (p: Page, n: string) => FOTOS && p.screenshot({ path: `${FOTOS}/var-${n}.png` });
+const foto = (p: Page, n: string) => fotoBase(p, "var-" + n);
 const PIN = { "x-pin": "1234" };
 
 async function movil(browser: Browser, codigo: string, equipo: string, nombre?: string) {
-  const p = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true })).newPage();
+  const p = await nuevaPagina(browser, `móvil ${equipo}`, opcionesMovil());
   await p.goto(`/?c=${codigo}`);
   await p.getByRole("button", { name: equipo }).click();
   if (nombre) {
@@ -27,10 +27,10 @@ test("variantes: nadie responde, 3 opciones, precios raros, hoja, todos fallan, 
   Object.assign(sub("olores"), { modo: "hoja", items: [{ etiqueta: "Mezcla 1", respuesta: "Sandía + Menta" }, { etiqueta: "Mezcla 2", respuesta: "Love 66" }] });
   expect((await request.put("/api/admin/contenido", { headers: PIN, data: c })).status()).toBe(200);
 
-  const tv = await (await browser.newContext({ viewport: { width: 1920, height: 1080 } })).newPage();
+  const tv = await nuevaTv(browser);
   await tv.goto("/tv");
   const codigo = (await tv.locator(".unete b").innerText()).trim();
-  const host = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const host = await nuevaPagina(browser, "panel", { viewport: { width: 1280, height: 900 } });
   await host.goto("/presentador");
   await host.getByPlaceholder("PIN").fill("1234");
   await host.getByRole("button", { name: "Entrar" }).click();

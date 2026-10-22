@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { leerPrecio, totales } from "../shared/puntuacion.ts";
 import { contenidoInicial } from "../server/contenido-inicial.ts";
-import { estadoVacio, Juego } from "../server/juego.ts";
+import { estadoVacio, Juego, normalizarEstado } from "../server/juego.ts";
 import { validarContenido } from "../server/validar.ts";
 import type { Sub } from "../shared/tipos.ts";
 
@@ -11,7 +11,7 @@ const EQ = ["rojo", "azul", "verde", "amarillo"];
 function partida() {
   let ahora = 1_000_000;
   const c = contenidoInicial();
-  const j = new Juego(c, estadoVacio(), () => ahora);
+  const j = new Juego(c, estadoVacio(), () => ahora, 0);
   const sub = <T extends Sub["tipo"]>(id: string, _t: T) => c.pruebas.flatMap((p) => p.subs).find((s) => s.id === id) as Extract<Sub, { tipo: T }>;
   return { j, c, sub, avanza: (ms: number) => (ahora += ms) };
 }
@@ -355,5 +355,92 @@ describe("Equipos y contenido", () => {
     const t = e.pruebas[4].subs[2];
     if (t.tipo === "tarjetas") t.tarjetas[0].palabra = "";
     expect(validarContenido(e)).toMatch(/tarjeta 1: falta la palabra/);
+  });
+});
+
+describe("Pulsador justo", () => {
+  function conVentana() {
+    let ahora = 1_000_000;
+    const j = new Juego(contenidoInicial(), estadoVacio(), () => ahora, 150);
+    j.host({ t: "ir", subId: "c-2000" });
+    j.host({ t: "empezar" });
+    return { j, avanza: (ms: number) => (ahora += ms) };
+  }
+
+  it("gana quien pulsó antes de verdad, no quien llegó antes", () => {
+    // Rojo (datos, 120 ms) llega en t=0 → pulsó en −120. Azul (wifi, 10 ms) llega en t=60 → pulsó en +50.
+    const { j, avanza } = conVentana();
+    expect(j.equipo("rojo", { t: "pulsar" }, { latencia: 120 })).toBe(true);
+    expect(j.estado.vivo.sonando).toBe(false); // la música se para en cuanto llega el primero
+    expect(j.estado.vivo.pulsado).toBeNull(); // aún no se decide
+    avanza(60);
+    j.equipo("azul", { t: "pulsar" }, { latencia: 10 });
+    avanza(100);
+    expect(j.tic()).toBe(true);
+    expect(j.estado.vivo.pulsado).toBe("rojo");
+
+    // Al revés: verde (wifi, 20 ms) llega primero → pulsó en −20; amarillo (datos, 140 ms) llega en +40 → pulsó en −100
+    const b = conVentana();
+    b.j.equipo("verde", { t: "pulsar" }, { latencia: 20 });
+    b.avanza(40);
+    b.j.equipo("amarillo", { t: "pulsar" }, { latencia: 140 });
+    b.avanza(120);
+    b.j.tic();
+    expect(b.j.estado.vivo.pulsado).toBe("amarillo");
+  });
+
+  it("una latencia inflada (2 s) solo se descuenta hasta el tope de 150 ms", () => {
+    // Azul pulsa en 0 sin latencia; rojo llega 140 ms después diciendo tener 2 s → cuenta como −10 (no −1860)
+    const { j, avanza } = conVentana();
+    j.equipo("azul", { t: "pulsar" }, { latencia: 0 });
+    avanza(140);
+    j.equipo("rojo", { t: "pulsar" }, { latencia: 2000 });
+    expect(j.estado.vivo.ventana?.candidatos.rojo).toBe(1_000_000 + 140 - 150);
+    avanza(20);
+    j.tic();
+    expect(j.estado.vivo.pulsado).toBe("rojo");
+  });
+
+  it("fuera de la ventana ya no entra nadie: gana el que había", () => {
+    const { j, avanza } = conVentana();
+    j.equipo("verde", { t: "pulsar" }, { latencia: 30 });
+    avanza(200);
+    j.tic();
+    expect(j.estado.vivo.pulsado).toBe("verde");
+    expect(j.equipo("rojo", { t: "pulsar" }, { latencia: 150 })).toBe(false);
+  });
+
+  it("revelar con la ventana abierta la cierra sin ganador", () => {
+    const { j, avanza } = conVentana();
+    j.equipo("verde", { t: "pulsar" });
+    j.host({ t: "revelar" });
+    avanza(200);
+    j.tic();
+    expect(j.estado.vivo.pulsado).toBeNull();
+  });
+});
+
+describe("Partidas guardadas por versiones antiguas", () => {
+  it("una hoja de la v0.1 (sin «hechos») no tumba el servidor al responder: regresión del fallo de olores", () => {
+    const c = contenidoInicial();
+    // Así guardaba la v0.1 la partida: olores a medias, hojas solo con valores y entregada
+    const viejo = {
+      codigo: "ABCD",
+      vivo: { subId: "olores", fase: "jugando", indice: 0, abiertaEn: 0, fin: null, respuestas: {}, pulsado: null, bloqueados: [], sonando: false, turno: null, tarjeta: -1,
+        cronometro: { desde: null, acumulado: 0 },
+        hojas: Object.fromEntries(EQ.map((e) => [e, { valores: ["", "", "", "", ""], entregada: false }])) },
+      crudo: {}, correcciones: {}, puntos: {}, ajustes: [], tarjetasUsadas: {},
+    };
+    const crudo = new Juego(c, JSON.parse(JSON.stringify(viejo)), Date.now, 0);
+    expect(() => crudo.equipo("rojo", { t: "item", valor: "menta" })).not.toThrow(); // sin normalizar tampoco revienta ya
+    const j = new Juego(c, normalizarEstado(JSON.parse(JSON.stringify(viejo))), Date.now, 0);
+    for (const e of EQ) expect(j.equipo(e, { t: "item", valor: "menta" })).toBe(true);
+    expect(j.estado.vivo.fase).toBe("revelar");
+    expect(j.publico().hojas?.rojo.marcas[0]).toBe("ko");
+  });
+
+  it("normalizar no toca una partida actual", () => {
+    const e = estadoVacio();
+    expect(normalizarEstado(structuredClone(e))).toEqual(e);
   });
 });

@@ -9,7 +9,7 @@ import multipart from "@fastify/multipart";
 import { Server } from "socket.io";
 import type { Contenido, Estado, EquipoId } from "../shared/tipos.ts";
 import { contenidoInicial } from "./contenido-inicial.ts";
-import { estadoVacio, Juego, type AccionEquipo, type AccionHost } from "./juego.ts";
+import { estadoVacio, Juego, normalizarEstado, type AccionEquipo, type AccionHost } from "./juego.ts";
 import { validarContenido } from "./validar.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -53,7 +53,7 @@ function migrar(c: Contenido): boolean {
 
 const contenido = leer<Contenido>(fContenido, contenidoInicial);
 if (migrar(contenido)) escribir(fContenido, contenido);
-const juego = new Juego(contenido, leer<Estado>(fEstado, estadoVacio));
+const juego = new Juego(contenido, normalizarEstado(leer<Estado>(fEstado, estadoVacio)));
 
 const pinOk = (p: unknown) => {
   const a = Buffer.from(String(p ?? ""));
@@ -88,6 +88,13 @@ app.put("/api/admin/contenido", async (req, reply) => {
   guardar();
   emitir();
   return { ok: true, rev: nuevo.rev };
+});
+// Partida nueva (mismos equipos y contenido, mismo código): útil tras un ensayo
+app.post("/api/admin/reiniciar", async () => {
+  juego.host({ t: "reiniciar" });
+  guardar();
+  emitir();
+  return { ok: true };
 });
 app.post("/api/admin/restaurar", async () => {
   juego.contenido = { ...contenidoInicial(), rev: (juego.contenido.rev ?? 0) + 1 };
@@ -128,7 +135,8 @@ if (existsSync(WEB)) {
 
 // ---------- Tiempo real ----------
 
-const io = new Server(app.server, { cors: { origin: false }, maxHttpBufferSize: 1e5 });
+// Latido cada 8 s (por defecto 25 s): un móvil que pierde la red se da por caído en ~13 s, no en ~45 s
+const io = new Server(app.server, { cors: { origin: false }, maxHttpBufferSize: 1e5, pingInterval: 8000, pingTimeout: 5000 });
 
 let guardarPendiente: NodeJS.Timeout | null = null;
 function guardar() {
@@ -151,22 +159,45 @@ let temporizador: NodeJS.Timeout | null = null;
 function programarTic() {
   if (temporizador) clearTimeout(temporizador);
   temporizador = null;
-  const fin = juego.estado.vivo.fin;
-  if (fin === null || juego.estado.vivo.fase !== "jugando") return;
+  const t = juego.proximoTic();
+  if (t === null) return;
+  // Fin de tiempo: 600 ms de margen para respuestas en vuelo. Ventana del pulsador: justo a su hora.
+  const margen = t === juego.estado.vivo.ventana?.hasta ? 5 : 600;
   temporizador = setTimeout(() => {
     if (juego.tic()) {
       guardar();
       emitir();
-    }
-  }, Math.max(fin - Date.now() + 600, 50));
+    } else programarTic();
+  }, Math.max(t - Date.now() + margen, 5));
 }
 
-function emitir() {
-  const con = conectados();
-  const pub = juego.publico(con);
-  io.to("tv").emit("publico", pub);
-  for (const id of juego.ids) io.to(`eq:${id}`).emit("equipo", juego.vistaEquipo(pub, id));
-  io.to("host").emit("host", {
+// ---------- Latencia de cada móvil (para el pulsador justo) ----------
+/** Mitad del ida y vuelta, media móvil, por socket. */
+const latencias = new Map<string, { equipo: EquipoId; ms: number }>();
+setInterval(() => {
+  for (const [, s] of io.sockets.sockets) {
+    const eq = s.data.equipo as EquipoId | undefined;
+    if (!eq) continue;
+    const t0 = Date.now();
+    s.timeout(3000).emit("latido", (err: unknown) => {
+      if (err) return;
+      const medio = (Date.now() - t0) / 2;
+      const prev = latencias.get(s.id)?.ms;
+      latencias.set(s.id, { equipo: eq, ms: prev === undefined ? medio : prev * 0.7 + medio * 0.3 });
+    });
+  }
+  // Que el panel vea las latencias aunque la partida esté parada
+  setTimeout(emitirHost, 1000);
+}, 2000).unref();
+
+function latenciasEquipos(): Record<EquipoId, number> {
+  const out: Record<EquipoId, number> = {};
+  for (const { equipo, ms } of latencias.values()) out[equipo] = Math.round(Math.min(out[equipo] ?? Infinity, ms));
+  return out;
+}
+
+function vistaHost(con: Record<EquipoId, number>, pub: ReturnType<Juego["publico"]>) {
+  return {
     ahora: pub.ahora,
     contenido: juego.contenido,
     estado: juego.estado,
@@ -174,8 +205,23 @@ function emitir() {
     conectados: con,
     tv: io.sockets.adapter.rooms.get("tv")?.size ?? 0,
     tvSonido: sonidoTv.size ? [...sonidoTv.values()].some(Boolean) : null,
+    latencias: latenciasEquipos(),
     deshacer: juego.puedeDeshacer,
-  });
+  };
+}
+
+function emitirHost() {
+  if (!io.sockets.adapter.rooms.get("host")?.size) return;
+  const con = conectados();
+  io.to("host").emit("host", vistaHost(con, juego.publico(con)));
+}
+
+function emitir() {
+  const con = conectados();
+  const pub = juego.publico(con);
+  io.to("tv").emit("publico", pub);
+  for (const id of juego.ids) io.to(`eq:${id}`).emit("equipo", juego.vistaEquipo(pub, id));
+  io.to("host").emit("host", vistaHost(con, pub));
   // Equipos sin elegir (pantalla de entrada): solo la lista de equipos
   io.to("lobby").emit("equipo", pub);
   programarTic();
@@ -227,6 +273,8 @@ io.on("connection", (socket) => {
       socket.join("lobby");
     } else {
       socket.join(`eq:${eq}`);
+      socket.data.equipo = eq;
+      socket.on("disconnect", () => latencias.delete(socket.id));
       let ultima = 0;
       socket.on("nombre", (nombre: unknown) => {
         if (juego.estado.codigo !== codigo) return;
@@ -236,7 +284,9 @@ io.on("connection", (socket) => {
         escribir(fContenido, juego.contenido);
         emitir();
       });
-      socket.on("equipo", (acc: AccionEquipo) => {
+      socket.on("equipo", (acc: AccionEquipo, ack?: (ok: boolean) => void) => {
+        // Confirmación al móvil (aunque se descarte): si no le llega, lo reenvía al reconectar
+        if (typeof ack === "function") ack(true);
         // Contra dobles toques en las respuestas tipo test/precio; hoja, entregar y pulsador van sin freno
         if (acc?.t === "responder") {
           const ahora = Date.now();
@@ -244,9 +294,15 @@ io.on("connection", (socket) => {
           ultima = ahora;
         }
         if (juego.estado.codigo !== codigo) return;
-        if (juego.equipo(eq, acc)) {
-          guardar();
-          emitir();
+        try {
+          if (juego.equipo(eq, acc, { latencia: latencias.get(socket.id)?.ms })) {
+            guardar();
+            emitir();
+          }
+        } catch (e) {
+          // Un fallo con una respuesta no puede tumbar la partida entera
+          app.log.error({ err: e, equipo: eq, accion: acc }, "fallo procesando una acción de equipo");
+          console.error("Fallo procesando una acción de equipo:", e);
         }
       });
     }
@@ -260,3 +316,19 @@ io.on("connection", (socket) => {
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
 console.log(`Concurso ${VERSION} en :${PORT} (datos en ${DATA})`);
+
+// Al parar el contenedor (docker stop/restart) se guarda al momento: el guardado normal espera 150 ms
+function cerrar(señal: string) {
+  if (guardarPendiente) clearTimeout(guardarPendiente);
+  escribir(fEstado, juego.estado);
+  console.log(`${señal}: partida guardada, cerrando`);
+  io.close();
+  void app.close().finally(() => process.exit(0));
+  setTimeout(() => process.exit(0), 1500).unref();
+}
+process.on("SIGTERM", () => cerrar("SIGTERM"));
+process.on("SIGINT", () => cerrar("SIGINT"));
+
+// Último recurso: un error inesperado se registra pero no reinicia el servidor en mitad del concurso
+process.on("uncaughtException", (e) => console.error("Error no capturado (el servidor sigue):", e));
+process.on("unhandledRejection", (e) => console.error("Promesa rechazada sin capturar (el servidor sigue):", e));

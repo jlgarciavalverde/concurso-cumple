@@ -75,7 +75,13 @@ export function Presentador() {
               <Icono n="tv" /> {!h.tv ? "TV sin conectar" : h.tvSonido === false ? "TV conectada · sonido bloqueado" : "TV conectada"}
             </span>
             {c.equipos.map((q) => (
-              <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} /><Icono n="telefono" /> {h.conectados[q.id] ?? 0}</span>
+              <span key={q.id} className="chip"><span className="punto" style={{ background: q.color }} /><Icono n="telefono" /> {h.conectados[q.id] ?? 0}
+                {h.latencias?.[q.id] !== undefined && (
+                  <span className="suave" title="Latencia de su mejor móvil (el pulsador la compensa)" style={{ color: h.latencias[q.id] > 150 ? "var(--ko)" : undefined }}>
+                    · {h.latencias[q.id]} ms
+                  </span>
+                )}
+              </span>
             ))}
           </div>
           <div className="fila">

@@ -59,6 +59,10 @@ export const vivoVacio = (): Vivo => ({
   cronometro: { desde: null, acumulado: 0 },
 });
 
+/** Pulsador justo: ventana de decisión y compensación máxima de latencia (que un móvil no gane retrasando sus pings). */
+export const VENTANA_PULSADOR = 150;
+export const MAX_COMPENSACION = 150;
+
 /** Un «Acierto» pulsado hasta 2 s después de la bocina todavía cuenta. */
 const MARGEN_ACIERTO = 2000;
 
@@ -94,6 +98,35 @@ export function totalItems(sub: Sub): number {
   }
 }
 
+/**
+ * Completa una partida guardada por una versión anterior con los campos que se añadieron después
+ * (si no, el código nuevo se encontraría `undefined` donde espera un array).
+ */
+export function normalizarEstado(e: Estado): Estado {
+  const base = estadoVacio();
+  const n: Estado = { ...base, ...e, codigo: e.codigo || base.codigo };
+  n.vivo = { ...vivoVacio(), ...e.vivo };
+  const hojas = (vivo: Vivo) => {
+    vivo.hojas ??= {};
+    for (const h of Object.values(vivo.hojas)) {
+      h.valores = Array.isArray(h.valores) ? h.valores : [];
+      h.hechos = Array.isArray(h.hechos) ? h.hechos : h.valores.map(() => false);
+      h.entregada = !!h.entregada;
+    }
+    vivo.respuestas ??= {};
+    vivo.bloqueados ??= [];
+    vivo.cronometro ??= { desde: null, acumulado: 0 };
+  };
+  hojas(n.vivo);
+  for (const [id, g] of Object.entries(n.guardados ?? {})) {
+    n.guardados![id] = { ...vivoVacio(), ...g };
+    hojas(n.guardados![id]);
+  }
+  for (const k of ["crudo", "correcciones", "puntos", "tarjetasUsadas"] as const) n[k] ??= {};
+  n.ajustes ??= [];
+  return n;
+}
+
 export class Juego {
   private pila: string[] = [];
 
@@ -101,6 +134,8 @@ export class Juego {
     public contenido: Contenido,
     public estado: Estado,
     private reloj: () => number = Date.now,
+    /** ms que se espera tras el primer pulsador por si otro pulsó antes pero su red es más lenta */
+    private ventanaPulsador = VENTANA_PULSADOR,
   ) {}
 
   get ids(): EquipoId[] {
@@ -154,6 +189,7 @@ export class Juego {
     v.pulsado = null;
     v.bloqueados = [];
     v.acertante = null;
+    v.ventana = null;
     v.fin = null;
     if ((sub.tipo === "test" || sub.tipo === "precio") && sub.segundos > 0) v.fin = ahora + sub.segundos * 1000;
     if (sub.tipo === "adivinar") {
@@ -198,6 +234,7 @@ export class Juego {
       this.recontar(sub.id);
     } else if (sub.tipo === "cancion") {
       v.pulsado = null;
+      v.ventana = null;
       v.sonando = true;
     } else if (sub.tipo === "tarjetas") {
       v.tarjeta = -1;
@@ -238,9 +275,21 @@ export class Juego {
   }
 
   /** Cierra sola la pregunta (o el turno de tarjetas) si se acabó el tiempo. Devuelve true si cambió algo. */
+  /** Próximo instante en que `tic()` tiene algo que hacer (fin de tiempo o de la ventana del pulsador). */
+  proximoTic(): number | null {
+    const v = this.estado.vivo;
+    if (v.fase !== "jugando") return null;
+    const t = [v.fin, v.ventana?.hasta].filter((x): x is number => typeof x === "number");
+    return t.length ? Math.min(...t) : null;
+  }
+
   tic(): boolean {
     const v = this.estado.vivo;
     const a = this.actual;
+    if (v.ventana && this.reloj() >= v.ventana.hasta) {
+      this.resolverPulsador();
+      return true;
+    }
     if (!a || v.fase !== "jugando" || v.fin === null || this.reloj() < v.fin) return false;
     if (a.sub.tipo === "test" || a.sub.tipo === "precio" || a.sub.tipo === "adivinar" || a.sub.tipo === "tarjetas") {
       this.revelar(a.sub);
@@ -516,7 +565,7 @@ export class Juego {
   }
 
   /** Acción de un equipo. Devuelve true si cambió el estado. */
-  equipo(eq: EquipoId, acc: AccionEquipo): boolean {
+  equipo(eq: EquipoId, acc: AccionEquipo, extra?: { latencia?: number }): boolean {
     const a = this.actual;
     const v = this.estado.vivo;
     if (!a || !this.ids.includes(eq) || v.fase !== "jugando") return false;
@@ -540,10 +589,12 @@ export class Juego {
     if (sub.tipo === "adivinar" && acc.t === "item" && porItem(sub) && aTiempo) {
       const h = v.hojas[eq];
       const valor = String(acc.valor ?? "").trim().slice(0, 60);
-      if (!h || h.hechos[v.indice] || !valor) return false;
+      if (!h || !valor) return false;
+      h.hechos ??= h.valores.map(() => false); // hojas guardadas por versiones antiguas no lo tenían
+      if (h.hechos[v.indice]) return false;
       h.valores[v.indice] = valor;
       h.hechos[v.indice] = true;
-      if (this.ids.every((id) => v.hojas[id]?.hechos[v.indice])) this.revelar(sub);
+      if (this.ids.every((id) => v.hojas[id]?.hechos?.[v.indice])) this.revelar(sub);
       return true;
     }
     if (sub.tipo === "adivinar" && !porItem(sub) && (acc.t === "hoja" || acc.t === "entregar") && aTiempo) {
@@ -559,11 +610,24 @@ export class Juego {
     }
     if (acc.t === "pulsar" && sub.tipo === "cancion") {
       if (v.pulsado || v.bloqueados.includes(eq)) return false;
-      v.pulsado = eq;
+      // Cuándo pulsó de verdad: lo que tardó en llegar su red (con tope) se le descuenta
+      const pulsadoEn = ahora - Math.min(Math.max(extra?.latencia ?? 0, 0), MAX_COMPENSACION);
       v.sonando = false;
+      v.ventana ??= { hasta: ahora + this.ventanaPulsador, candidatos: {} };
+      if (eq in v.ventana.candidatos) return false;
+      v.ventana.candidatos[eq] = pulsadoEn;
+      if (this.ventanaPulsador <= 0) this.resolverPulsador();
       return true;
     }
     return false;
+  }
+
+  private resolverPulsador() {
+    const v = this.estado.vivo;
+    const c = v.ventana?.candidatos ?? {};
+    v.ventana = null;
+    const ganador = Object.entries(c).sort((x, y) => x[1] - y[1])[0]?.[0];
+    if (ganador) v.pulsado = ganador;
   }
 
   // ---------- Vistas ----------

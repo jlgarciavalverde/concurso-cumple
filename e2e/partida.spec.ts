@@ -1,11 +1,10 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { foto as fotoBase, FOTOS, nuevaPagina, nuevaTv, opcionesMovil, vigilar } from "./util.ts";
 
-const FOTOS = process.env.FOTOS; // carpeta para capturas de revisión (opcional)
-const foto = async (p: Page, n: string) => FOTOS && p.screenshot({ path: `${FOTOS}/${n}.png` });
+const foto = (p: Page, n: string) => fotoBase(p, "" + n);
 
 async function movil(browser: Browser, codigo: string, equipo: string, nombre?: string) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
-  const p = await ctx.newPage();
+  const p = await nuevaPagina(browser, `móvil ${equipo}`, opcionesMovil());
   await p.goto(`/?c=${codigo}`);
   await p.getByRole("button", { name: equipo }).click();
   // la primera vez piden nombre de equipo
@@ -30,8 +29,7 @@ function wav(segundos: number): Buffer {
 }
 
 test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
-  const tvCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
-  const tv = await tvCtx.newPage();
+  const tv = await nuevaTv(browser);
   await tv.goto("/tv");
   // La TV no tiene nada que tocar
   await expect(tv.locator(".tv-cab")).toBeVisible();
@@ -39,7 +37,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   const codigo = (await tv.locator(".unete b").innerText()).trim();
   expect(codigo).toMatch(/^[A-Z]{4}$/);
 
-  const host = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const host = await nuevaPagina(browser, "panel", { viewport: { width: 1280, height: 900 } });
   await host.goto("/presentador");
   await host.getByPlaceholder("PIN").fill("1234");
   await host.getByRole("button", { name: "Entrar" }).click();
@@ -192,7 +190,8 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
   await expect(host.locator(".tarjeta-host")).toBeVisible();
   const palabra = (await host.locator(".tarjeta-host .pal").textContent()) ?? "";
   await expect(tv.locator(".tarjeta-tv .pal")).toHaveText(palabra, { ignoreCase: true }); // en la TV, para quien explica
-  await expect(rojo.getByText(new RegExp(palabra, "i"))).toHaveCount(0); // nunca en los móviles
+  // nunca en los móviles (palabra entera: «Ex» no debe confundirse con «explica»)
+  await expect(rojo.getByText(new RegExp(`(^|[^\\p{L}])${palabra}([^\\p{L}]|$)`, "iu"))).toHaveCount(0);
   await host.getByText("Mostrar la tarjeta en la TV").click();
   await expect(tv.locator(".tarjeta-tv")).toHaveCount(0);
   await host.getByText("Mostrar la tarjeta en la TV").click();
@@ -238,6 +237,7 @@ test("partida completa: tv + presentador + 4 móviles", async ({ browser }) => {
 });
 
 test("admin: PIN, edición y guardado", async ({ page }) => {
+  vigilar(page, "admin");
   await page.goto("/admin");
   await page.getByPlaceholder("PIN").fill("0000");
   await page.getByRole("button", { name: "Entrar" }).click();

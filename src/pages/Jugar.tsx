@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Icono, Insignia, ICONOS, type NombreIcono } from "../components/iconos.tsx";
 import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
@@ -14,7 +14,7 @@ export function Jugar() {
   const [nombrando, setNombrando] = useState(false);
   const auth = enviado ? { rol: "equipo", codigo, equipo } : null;
   const [aviso, setAviso] = useState<string | null>(null);
-  const { datos, error, conectado, desfase, enviar } = useCanal<VistaEquipo | Publico>(auth, "equipo", {
+  const { datos, error, conectado, desfase, enviar, enviarSeguro } = useCanal<VistaEquipo | Publico>(auth, "equipo", {
     aviso: (m: string) => {
       setAviso(m);
       setNombrando(true);
@@ -109,7 +109,9 @@ export function Jugar() {
             }}
           />
         ) : (
-          <Cuerpo v={v} desfase={desfase} enviar={(a) => enviar("equipo", a)} />
+          <Conexion.Provider value={conectado}>
+            <Cuerpo v={v} desfase={desfase} enviar={(a) => enviarSeguro("equipo", a)} />
+          </Conexion.Provider>
         )}
       </div>
       <button
@@ -128,6 +130,20 @@ export function Jugar() {
 }
 
 type Enviar = (a: unknown) => void;
+
+/** ¿Hay conexión? (para decir «Enviando…» en vez de «Enviado» si la respuesta no ha llegado al servidor). */
+const Conexion = createContext(true);
+
+/** Lo que este móvil ha mandado y el servidor aún no ha confirmado; se olvida al cambiar de pregunta. */
+function usePendiente<T>(clave: string) {
+  const [p, setP] = useState<{ clave: string; valor: T } | null>(null);
+  return [p?.clave === clave ? p.valor : null, (valor: T) => setP({ clave, valor })] as const;
+}
+
+function Enviando({ icono }: { icono: string }) {
+  const conectado = useContext(Conexion);
+  return <Espera icono={icono} texto={conectado ? "Enviando…" : "Sin conexión: se enviará en cuanto vuelva"} />;
+}
 
 function Espera({ icono = "tv", texto }: { icono?: NombreIcono | ReactNode; texto: string }) {
   return (
@@ -237,6 +253,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
 }
 
 function TestMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; enviar: Enviar }) {
+  const [pend, setPend] = usePendiente<number>(`${v.sub?.id}:${v.indice}`);
   const q = v.pregunta;
   if (!q) return null;
   const mia = v.miRespuesta as number | undefined;
@@ -245,13 +262,14 @@ function TestMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
     return (
       <>
         <div className={`resultado-movil ${bien ? "bien" : "mal"}`}><Insignia m={mia === undefined ? "nada" : bien ? "ok" : "ko"} />
-          {mia === undefined ? "Sin respuesta" : bien ? "¡Correcto!" : "Fallo"}
+          {mia === undefined ? (pend !== null ? "No llegó a tiempo" : "Sin respuesta") : bien ? "¡Correcto!" : "Fallo"}
           {bien && v.bonus?.[v.yo] ? <span style={{ fontSize: "0.7em" }}> <Icono n="rayo" />+{fmt(v.bonus[v.yo])} por rapidez</span> : null}</div>
         <div className="espera suave">Correcta: {FORMAS[v.solucion?.correcta ?? 0]} {q.opciones?.[v.solucion?.correcta ?? 0]}</div>
       </>
     );
   }
   if (mia !== undefined) return <Espera icono={FORMAS[mia]} texto="Respuesta enviada. ¡A esperar!" />;
+  if (pend !== null) return <Enviando icono={FORMAS[pend]} />;
   return (
     <>
       <div className="fila" style={{ justifyContent: "space-between" }}>
@@ -261,7 +279,14 @@ function TestMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
       <div style={{ fontWeight: 700, fontSize: "1.15em" }}>{q.texto}</div>
       <div className="botones4">
         {q.opciones?.map((o, i) => (
-          <button key={i} className={`op op${i % 4}`} onClick={() => enviar({ t: "responder", valor: i })}>
+          <button
+            key={i}
+            className={`op op${i % 4}`}
+            onClick={() => {
+              setPend(i);
+              enviar({ t: "responder", valor: i });
+            }}
+          >
             <span className="forma">{FORMAS[i % 4]}</span>
             {o}
           </button>
@@ -323,6 +348,7 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
   const elegidas = txt.split("+").map((x) => x.trim()).filter(Boolean);
   const alternar = (o: string) => setTxt((elegidas.includes(o) ? elegidas.filter((x) => x !== o) : [...elegidas, o]).join(" + "));
   const enviada = hoja?.hechos?.[v.indice];
+  const [pend, setPend] = usePendiente<string>(`${s.id}:${v.indice}`);
   const m = marcas[v.indice];
 
   return (
@@ -351,7 +377,7 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
           <>
             <div className={`resultado-movil ${m === "ok" ? "bien" : m === "ko" ? "mal" : m === "medio" ? "medio" : "nada"}`}>
               {m && <Insignia m={m} />}
-              {m ? MARCA_TXT[m] : "…"}
+              {m === "nada" && pend !== null ? "No llegó a tiempo" : m ? MARCA_TXT[m] : "…"}
               {m === "ok" || m === "medio" ? ` (+${String(v.hojas?.[v.yo]?.puntos[v.indice] ?? 0).replace(".", ",")})` : ""}
             </div>
             <div className="suave">Solución: <b style={{ color: "var(--texto)" }}>{v.solucion?.respuestas?.[v.indice]}</b></div>
@@ -359,12 +385,16 @@ function ItemMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
           </>
         ) : enviada ? (
           <Espera icono="lapiz" texto={`Enviado: «${hoja?.valores[v.indice]}». ¡A esperar!`} />
+        ) : pend !== null ? (
+          <Enviando icono="lapiz" />
         ) : (
           <form
             className="col"
             onSubmit={(e) => {
               e.preventDefault();
-              if (txt.trim()) enviar({ t: "item", valor: txt.trim() });
+              if (!txt.trim()) return;
+              setPend(txt.trim());
+              enviar({ t: "item", valor: txt.trim() });
             }}
           >
             {opciones.length > 0 && (
@@ -481,21 +511,25 @@ function HojaMovil({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; en
 }
 
 function Pulsador({ v, enviar }: { v: VistaEquipo; enviar: Enviar }) {
+  const [pend, setPend] = usePendiente<true>(`${v.sub?.id}:${v.indice}:${v.bloqueados.length}`);
+  const conectado = useContext(Conexion);
   if (v.fase === "revelar") return <Espera icono="nota" texto={v.solucion?.texto ?? ""} />;
   const bloqueado = v.bloqueados.includes(v.yo);
   const otro = v.pulsado && v.pulsado !== v.yo ? equipoDe(v, v.pulsado) : null;
+  const esperando = pend && !v.pulsado;
   return (
     <>
       <div className="espera suave">{v.sub!.titulo} · {v.indice + 1}/{v.sub!.total}</div>
       <button
         className="pulsador"
-        disabled={!!v.pulsado || bloqueado}
+        disabled={!!v.pulsado || bloqueado || !!esperando}
         onPointerDown={() => {
           navigator.vibrate?.(80);
+          setPend(true);
           enviar({ t: "pulsar" });
         }}
       >
-        {v.pulsado === v.yo ? "¡Vuestro turno!" : bloqueado ? "Bloqueados" : otro ? otro.nombre : "¡PULSA!"}
+        {v.pulsado === v.yo ? "¡Vuestro turno!" : bloqueado ? "Bloqueados" : otro ? otro.nombre : esperando ? (conectado ? "…" : "Sin red") : "¡PULSA!"}
       </button>
       <div className="espera">{v.pulsado === v.yo ? "Decid la canción en voz alta" : otro ? `Contesta ${otro.nombre}…` : bloqueado ? "Habéis fallado esta" : ""}</div>
     </>
