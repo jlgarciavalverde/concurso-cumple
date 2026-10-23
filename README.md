@@ -19,6 +19,18 @@ App para el concurso: TV + presentador + un móvil por equipo. 4 equipos; cada p
 - Palabra prohibida / dibujo: la tarjeta sale en el móvil del presentador; pásaselo a quien explica.
 - Si se cae algo, recarga: la partida se guarda en `data/estado.json` y sigue donde estaba.
 
+## Kahoot del cumpleañero
+Él lanza su Kahoot en directo desde la app de Kahoot. El presentador escribe en su panel el PIN que le sale y la TV lo enseña con un QR que entra directo. Cada equipo entra con su nombre; al acabar, el presentador apunta el puesto de cada equipo (1º → 10 puntos…).
+
+## Concurso de disfraces (al final)
+Lista de invitados en `/admin`. En el panel, «Votación de disfraces» → Abrir: la TV enseña un QR (`/votar`), cada invitado elige su nombre y vota (uno por persona, no a sí mismo). Cerrar → Revelar (3º, 2º y ganador). Si hay empate, «Desempatar» abre una votación solo entre ellos.
+
+## Canciones desde Spotify (opcional, cuenta Premium)
+1. https://developer.spotify.com/dashboard → Create app (con la cuenta Premium). Redirect URI: `https://concurso.redgarverde.com/api/spotify/callback`. Marcar «Web API» y «Web Playback SDK».
+2. Poner Client ID y secret en `~/servicios/concurso/.env` (ver `deploy/.env.example`) y `docker compose up -d`.
+3. `/admin` → una ronda de canciones → «Conectar con Spotify» → pegar el enlace de una lista **tuya** → «Cargar canciones».
+4. El día: TV abierta con el lanzador → en el panel, «Autorizar la TV para Spotify». La TV suena como un reproductor de Spotify (sin enseñar el título).
+
 ## Si algo falla el día
 - **Un móvil se queda sin red:** sale una banda roja «Reconectando…». Lo que respondan sin red se envía solo al volver (si aún hay tiempo; si no, verán «No llegó a tiempo»).
 - **Se reinicia el servidor:** la partida está guardada; TV, panel y móviles vuelven solos donde estaban.

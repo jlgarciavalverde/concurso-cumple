@@ -84,9 +84,16 @@ const POR_TIPO: Record<Sub["tipo"], Guia> = {
   cancion: POR_RONDA["c-reggaeton"],
   tarjetas: POR_RONDA.prohibida,
   manual: POR_RONDA.sorpresa,
+  externo: {
+    que: "El Kahoot que ha preparado el cumpleañero en la app de Kahoot.",
+    como: "Él lanza la partida desde su Kahoot; al lanzarla le sale un PIN de unas cifras. El presentador escribe ese PIN en su panel y nuestra TV enseña el PIN en grande y un QR para entrar directo. Cada equipo entra en Kahoot con su móvil usando el nombre de su equipo. Al acabar, el presentador apunta en qué puesto quedó cada equipo en el podio de Kahoot y la app reparte 10/5/3/1.",
+    preparar: "Que el cumpleañero tenga su Kahoot listo en su cuenta y un dispositivo para lanzarlo (y, si quiere, enseñar sus preguntas en otra pantalla).",
+    escribir: "Nada: el PIN se pone el día, en el panel del presentador. Si al final no hay Kahoot del cumpleañero, cambia a «Preguntas aquí» y escribe las preguntas en la app.",
+  },
 };
 
 export function guiaDe(s: Sub): Guia {
   if (s.id.startsWith("c-") && s.tipo === "cancion") return { ...POR_RONDA["c-reggaeton"], que: `Adivinar canciones: «${s.titulo}».` };
+  if (s.tipo === "externo") return POR_TIPO.externo;
   return POR_RONDA[s.id] ?? POR_TIPO[s.tipo];
 }

@@ -1,6 +1,6 @@
 // Motor del concurso: estado + acciones del presentador y de los equipos. Sin E/S: el servidor persiste y emite.
-import { BONUS_RAPIDEZ, coincide, desglose, puntosPrecio, puntosSub, puntosTest, totales } from "../shared/puntuacion.ts";
-import { fragmento, porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo } from "../shared/tipos.ts";
+import { BONUS_RAPIDEZ, coincide, desglose, podioVotacion, puntosPrecio, puntosSub, puntosTest, totales } from "../shared/puntuacion.ts";
+import { fragmento, porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo, type Votacion, type VotacionPublica } from "../shared/tipos.ts";
 
 export type AccionHost =
   | { t: "ir"; subId: string | null }
@@ -33,7 +33,9 @@ export type AccionHost =
   | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez" | "fragmento"; valor: number | boolean }
   | { t: "podioPaso" }
   | { t: "repetir" }
-  | { t: "tv"; mudo?: boolean; volumen?: number };
+  | { t: "tv"; mudo?: boolean; volumen?: number }
+  | { t: "pin"; pin: string }
+  | { t: "votacion"; op: "abrir" | "cerrar" | "revelar" | "desempatar" | "reiniciar" };
 
 export type AccionEquipo =
   | { t: "responder"; valor: number }
@@ -94,6 +96,7 @@ export function totalItems(sub: Sub): number {
     case "tarjetas":
       return sub.tarjetas.length;
     case "manual":
+    case "externo":
       return 0;
   }
 }
@@ -314,7 +317,7 @@ export class Juego {
 
     switch (acc.t) {
       case "vista":
-        if (["juego", "marcador", "podio"].includes(acc.v)) v.vista = acc.v;
+        if (["juego", "marcador", "podio", "votacion"].includes(acc.v)) v.vista = acc.v;
         if (acc.v === "podio") v.podioPaso = 0; // el final se revela por pasos
         return;
       case "tv": {
@@ -324,6 +327,9 @@ export class Juego {
         this.pila.pop(); // el sonido no es un paso de la partida: no se deshace
         return;
       }
+      case "votacion":
+        this.accionVotacion(acc.op);
+        return;
       case "podioPaso":
         v.podioPaso = Math.min((v.podioPaso ?? 0) + 1, this.pasosPodio());
         return;
@@ -366,6 +372,10 @@ export class Juego {
       case "deCero":
         this.limpiar(sub.id);
         return;
+      case "pin":
+        // PIN del Kahoot que acaba de lanzar el cumpleañero (solo cifras)
+        if (sub.tipo === "externo") (e.pines ??= {})[sub.id] = String(acc.pin ?? "").replace(/\D/g, "").slice(0, 10);
+        return;
       case "siguienteTurno": {
         if (sub.tipo !== "tarjetas" && sub.tipo !== "manual") return;
         const ids = this.ids;
@@ -391,6 +401,8 @@ export class Juego {
           v.fase = "jugando";
           v.abiertaEn = ahora;
           v.fin = sub.segundos ? ahora + sub.segundos * 1000 : null;
+        } else if (sub.tipo === "externo") {
+          v.fase = "jugando";
         } else if (totalItems(sub) > 0) {
           this.abrir(sub);
         }
@@ -399,7 +411,7 @@ export class Juego {
         this.revelar(sub);
         return;
       case "siguiente":
-        if (sub.tipo === "tarjetas" || sub.tipo === "manual" || (sub.tipo === "adivinar" && !porItem(sub))) {
+        if (sub.tipo === "tarjetas" || sub.tipo === "manual" || sub.tipo === "externo" || (sub.tipo === "adivinar" && !porItem(sub))) {
           v.fase = "resultado";
           v.sonando = false;
           return;
@@ -505,7 +517,7 @@ export class Juego {
       case "config": {
         const n = Math.round(Number(acc.valor));
         if (acc.campo === "segundosItem" && sub.tipo === "adivinar" && n >= 0 && n <= 600) sub.segundosItem = n;
-        if (acc.campo === "segundos" && sub.tipo !== "cancion" && n >= 0 && n <= 600) sub.segundos = n;
+        if (acc.campo === "segundos" && sub.tipo !== "cancion" && sub.tipo !== "externo" && n >= 0 && n <= 600) sub.segundos = n;
         if (acc.campo === "tarjetaEnTv" && sub.tipo === "tarjetas") sub.tarjetaEnTv = !!acc.valor;
         if (acc.campo === "rapidez" && sub.tipo === "test") sub.rapidez = !!acc.valor;
         if (acc.campo === "fragmento" && sub.tipo === "cancion" && n >= 0 && n <= 600) sub.fragmento = n;
@@ -655,6 +667,7 @@ export class Juego {
       turno: v.turno,
       cronometro: v.cronometro,
       podioPaso: v.podioPaso ?? 0,
+      votacion: this.participantes.length || e.votacion ? this.publicoVotacion() : undefined,
       repetir: v.repetir ?? 0,
       tv: e.tv ?? { mudo: false, volumen: 80 },
       crudo: {},
@@ -730,7 +743,9 @@ export class Juego {
       const c = sub.canciones[v.indice];
       base.audiosSub = sub.canciones.map((x) => x.audio).filter((x): x is string => !!x);
       if (c && v.fase !== "intro") {
+        // El MP3 manda si hay los dos (no depende de Spotify); si no, suena por Spotify en la TV
         if (c.audio) base.audio = { src: c.audio, inicio: c.inicio, fragmento: fragmento(sub) };
+        else if (c.spotify) base.audio = { spotify: c.spotify, inicio: c.inicio, fragmento: fragmento(sub) };
         if (v.fase === "revelar") {
           base.solucion = { texto: `${c.titulo} — ${c.artista}` };
           base.ganadores = v.acertante ? [v.acertante] : [];
@@ -738,14 +753,89 @@ export class Juego {
       }
     } else if (sub.tipo === "tarjetas") {
       base.sub.modo = sub.modo;
+      base.sub.tarjetaEnTv = tarjetaEnTv(sub);
       const t = sub.tarjetas[v.tarjeta];
       if (t?.condicion && v.fase === "jugando") base.condicion = t.condicion;
       if (t && v.fase === "jugando" && tarjetaEnTv(sub)) base.tarjeta = t;
     } else if (sub.tipo === "manual") {
       base.sub.medida = sub.medida;
       base.sub.cronometro = sub.cronometro;
+    } else if (sub.tipo === "externo") {
+      base.sub.medida = "puesto";
+      base.externo = { plataforma: sub.plataforma, pin: e.pines?.[sub.id] ?? null };
     }
     return base;
+  }
+
+  // ---------- Votación del mejor disfraz ----------
+
+  get participantes(): string[] {
+    return (this.contenido.disfraces?.participantes ?? []).map((x) => x.trim()).filter(Boolean);
+  }
+
+  private votacion(): Votacion {
+    return (this.estado.votacion ??= { estado: "preparada", votos: {}, candidatos: null, ronda: 1, paso: 0 });
+  }
+
+  private accionVotacion(op: "abrir" | "cerrar" | "revelar" | "desempatar" | "reiniciar") {
+    const vt = this.votacion();
+    const v = this.estado.vivo;
+    if (op === "abrir") {
+      vt.estado = "abierta";
+      vt.paso = 0;
+      v.vista = "votacion";
+    } else if (op === "cerrar") {
+      vt.estado = "cerrada";
+      vt.paso = 0;
+    } else if (op === "revelar") {
+      if (vt.estado === "abierta") vt.estado = "cerrada";
+      const total = podioVotacion(vt.votos, this.candidatos()).length;
+      vt.paso = Math.min(vt.paso + 1, total);
+      v.vista = "votacion";
+    } else if (op === "desempatar") {
+      // Nueva votación solo entre los empatados en el primer puesto
+      const primeros = podioVotacion(vt.votos, this.candidatos()).at(-1)?.nombres ?? [];
+      if (primeros.length < 2) return;
+      this.estado.votacion = { estado: "abierta", votos: {}, candidatos: primeros, ronda: vt.ronda + 1, paso: 0 };
+      v.vista = "votacion";
+    } else if (op === "reiniciar") {
+      this.estado.votacion = { estado: "preparada", votos: {}, candidatos: null, ronda: 1, paso: 0 };
+    }
+  }
+
+  private candidatos(): string[] {
+    const c = this.estado.votacion?.candidatos;
+    return c && c.length ? c.filter((x) => this.participantes.includes(x)) : this.participantes;
+  }
+
+  /** Un invitado vota. Devuelve null si vale o el motivo si no. */
+  votar(votante: unknown, votado: unknown): string | null {
+    const vt = this.votacion();
+    const quien = String(votante ?? "").trim();
+    const a = String(votado ?? "").trim();
+    if (vt.estado !== "abierta") return "La votación no está abierta";
+    if (!this.participantes.includes(quien)) return "No estás en la lista";
+    if (!this.candidatos().includes(a)) return "Ese disfraz no está en la votación";
+    if (quien === a) return "No vale votarte a ti mismo";
+    if (vt.votos[quien]) return "Ya has votado";
+    vt.votos[quien] = a;
+    return null;
+  }
+
+  publicoVotacion(): VotacionPublica {
+    const vt = this.votacion();
+    const grupos = podioVotacion(vt.votos, this.candidatos());
+    const revelados = grupos.slice(0, vt.paso); // de peor a mejor: primero el 3º, el ganador al final
+    return {
+      estado: vt.estado,
+      participantes: this.participantes,
+      candidatos: this.candidatos(),
+      votaron: Object.keys(vt.votos),
+      ronda: vt.ronda,
+      paso: vt.paso,
+      totalPasos: grupos.length,
+      revelados,
+    };
   }
 
   vistaEquipo(pub: Publico, eq: EquipoId): VistaEquipo {

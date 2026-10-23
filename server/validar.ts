@@ -1,6 +1,6 @@
 import type { Contenido } from "../shared/tipos.ts";
 
-const TIPOS = ["test", "adivinar", "precio", "cancion", "tarjetas", "manual"];
+const TIPOS = ["test", "adivinar", "precio", "cancion", "tarjetas", "manual", "externo"];
 
 const segundosMal = (n: unknown) => n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 600);
 
@@ -19,6 +19,8 @@ export function validarContenido(c: unknown): string | null {
     const n = e.nombre.trim().toLocaleLowerCase("es");
     if (nombres.has(n)) return `Hay dos equipos que se llaman «${e.nombre.trim()}»`;
     if (ids.has(e.id)) return `Equipo repetido: ${e.id}`;
+    if (e.miembros !== undefined && (!Array.isArray(e.miembros) || e.miembros.length > 30 || !e.miembros.every((m: unknown) => typeof m === "string" && m.length <= 60)))
+      return `Los integrantes de «${e.nombre.trim()}» no son válidos`;
     ids.add(e.id);
     nombres.add(n);
   }
@@ -49,6 +51,16 @@ export function validarContenido(c: unknown): string | null {
         for (const [i, t] of s.tarjetas.entries()) if (typeof t.palabra !== "string" || !t.palabra.trim()) return `${donde}, tarjeta ${i + 1}: falta la palabra`;
       if (s.tipo === "adivinar")
         for (const [i, it] of s.items.entries()) if (typeof it.respuesta !== "string") return `${donde}, ${it.etiqueta || `item ${i + 1}`}: falta la solución`;
+    }
+  }
+  if (x.disfraces !== undefined) {
+    const p = x.disfraces?.participantes;
+    if (!Array.isArray(p) || !p.every((n) => typeof n === "string")) return "Lista de invitados no válida";
+    const vistos = new Set<string>();
+    for (const n of p.map((n) => n.trim()).filter(Boolean)) {
+      const k = n.toLocaleLowerCase("es");
+      if (vistos.has(k)) return `En la lista de invitados «${n}» está repetido (añade la inicial del apellido)`;
+      vistos.add(k);
     }
   }
   if (JSON.stringify(x).length > 1_000_000) return "Contenido demasiado grande";

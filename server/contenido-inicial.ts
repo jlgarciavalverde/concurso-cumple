@@ -1,5 +1,5 @@
 // Contenido de partida. Lo marcado con ✏️ es plantilla para rellenar desde /admin.
-import type { Cancion, Contenido, PreguntaTest, Tarjeta } from "../shared/tipos.ts";
+import type { Cancion, Contenido, PreguntaTest, Sub, Tarjeta } from "../shared/tipos.ts";
 
 const plantillaKahoot = [
   "¿En qué año nació el cumpleañero?",
@@ -126,11 +126,13 @@ export const contenidoInicial = (): Contenido => structuredClone(base());
 const base = (): Contenido => ({
   titulo: "El Concurso del Cumple",
   tabla: [10, 5, 3, 1],
+  migraciones: ["5-equipos", "kahoot-externo"], // ya vienen hechas
   equipos: [
     { id: "rojo", nombre: "Rojo", color: "#ef4444" },
     { id: "azul", nombre: "Azul", color: "#3b82f6" },
     { id: "verde", nombre: "Verde", color: "#22c55e" },
     { id: "amarillo", nombre: "Amarillo", color: "#eab308" },
+    { id: "morado", nombre: "Morado", color: "#a855f7" },
   ],
   pruebas: [
     {
@@ -138,7 +140,7 @@ const base = (): Contenido => ({
       titulo: "Kahoot del cumpleañero",
       emoji: "🎂",
       agrupar: false,
-      subs: [{ id: "kahoot", tipo: "test", titulo: "¿Cuánto le conocéis?", puntuacion: "ranking", rapidez: true, segundos: 20, preguntas: plantillaKahoot }],
+      subs: [kahootExterno({ id: "kahoot", tipo: "test", titulo: "¿Cuánto le conocéis?", puntuacion: "ranking", rapidez: true, segundos: 20, preguntas: plantillaKahoot })],
     },
     {
       id: "cachimba",
@@ -279,3 +281,15 @@ const base = (): Contenido => ({
     },
   ],
 });
+
+/** Ronda «Kahoot del cumpleañero»: se juega en Kahoot; aquí solo el PIN y los puestos. Guarda las preguntas propias. */
+export function kahootExterno(respaldo: Sub): Sub {
+  return {
+    id: respaldo.id,
+    tipo: "externo",
+    plataforma: "kahoot",
+    titulo: "¿Cuánto le conocéis?",
+    descripcion: "El Kahoot del cumpleañero: entrad con el nombre de vuestro equipo.",
+    respaldo,
+  };
+}

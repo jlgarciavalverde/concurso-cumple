@@ -6,6 +6,7 @@ export interface Equipo {
   id: EquipoId;
   nombre: string;
   color: string;
+  miembros?: string[]; // quién juega en el equipo
 }
 
 export interface PreguntaTest {
@@ -30,7 +31,9 @@ export interface Producto {
 export interface Cancion {
   titulo: string;
   artista: string;
-  audio?: string;
+  audio?: string; // MP3 subido
+  spotify?: string; // «spotify:track:…» (suena en la TV por Spotify)
+  duracion?: number; // segundos (de Spotify)
   inicio: number;
 }
 
@@ -55,7 +58,10 @@ export type Sub =
   | (SubBase & { tipo: "precio"; sinPasarse: boolean; segundos: number; productos: Producto[] })
   | (SubBase & { tipo: "cancion"; fragmento?: number; canciones: Cancion[] }) // fragmento: segundos que suena (0 = entera)
   | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; tarjetaEnTv?: boolean; segundos: number; tarjetas: Tarjeta[] })
-  | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean; segundos?: number });
+  | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean; segundos?: number })
+  // Juego en otra plataforma (el Kahoot del cumpleañero): la TV enseña cómo unirse y se meten los puestos a mano.
+  // `respaldo`: las preguntas propias, por si se vuelve a «Preguntas aquí».
+  | (SubBase & { tipo: "externo"; plataforma: "kahoot"; respaldo?: Sub });
 
 export type TipoSub = Sub["tipo"];
 
@@ -73,6 +79,17 @@ export interface Contenido {
   tabla: number[]; // 10/5/3/1
   equipos: Equipo[];
   pruebas: Prueba[];
+  disfraces?: { participantes: string[] };
+  migraciones?: string[]; // cambios de versión ya aplicados (para no repetirlos) // concurso de disfraces: quién va disfrazado (y vota)
+}
+
+/** Votación del mejor disfraz (al final del concurso). */
+export interface Votacion {
+  estado: "preparada" | "abierta" | "cerrada";
+  votos: Record<string, string>; // votante → votado
+  candidatos: string[] | null; // null = todos; en un desempate, solo los empatados
+  ronda: number; // 1, y 2+ si hay desempate
+  paso: number; // puestos revelados (empezando por el 3º)
 }
 
 // ---------- Estado en vivo ----------
@@ -84,7 +101,7 @@ export interface Respuesta {
   ms: number; // ms desde que se abrió la pregunta
 }
 
-export type Vista = "juego" | "marcador" | "podio";
+export type Vista = "juego" | "marcador" | "podio" | "votacion";
 
 export interface Vivo {
   subId: string | null;
@@ -137,6 +154,8 @@ export interface Estado {
   tarjetasUsadas: Record<string, number[]>;
   guardados?: Record<string, Vivo>; // cómo se dejó cada subprueba al salir de ella (para continuar)
   tv?: { mudo: boolean; volumen: number }; // sonido de la TV, lo controla el presentador
+  votacion?: Votacion;
+  pines?: Record<string, string>; // ronda externa → PIN del juego (Kahoot)
 }
 
 // Lo que reciben TV y móviles (sin soluciones antes de tiempo)
@@ -159,6 +178,7 @@ export interface Publico {
     estilo?: "lista" | "rosco";
     porItem?: boolean;
     modo?: "palabra" | "dibujo";
+    tarjetaEnTv?: boolean;
     medida?: string;
     cronometro?: boolean;
     opciones?: string[];
@@ -178,11 +198,13 @@ export interface Publico {
   pulsado: EquipoId | null;
   bloqueados: EquipoId[];
   sonando: boolean;
-  audio?: { src: string; inicio: number; fragmento: number };
+  audio?: { src?: string; spotify?: string; inicio: number; fragmento: number };
   audiosSub?: string[]; // para precargar los MP3 de la ronda
   podioPaso: number;
   repetir: number;
   tv: { mudo: boolean; volumen: number };
+  externo?: { plataforma: "kahoot"; pin: string | null };
+  votacion?: VotacionPublica;
   turno: EquipoId | null;
   condicion?: string;
   tarjeta?: Tarjeta; // solo TV y presentador, nunca a los móviles
@@ -208,11 +230,33 @@ export interface VistaHost {
   tv: number;
   tvSonido: boolean | null; // ¿la TV puede sonar? (null: no lo ha dicho / sin TV)
   latencias: Record<EquipoId, number>; // ms (mitad del ida y vuelta) del mejor móvil de cada equipo
+  spotify?: {
+    configurado: boolean;
+    conectado: boolean;
+    cuenta: string | null;
+    premium: boolean | null;
+    tvs: { autorizada: boolean; listo: boolean; error: string | null }[];
+  };
   deshacer: number;
 }
 
 // Valores por defecto de campos añadidos después (el contenido guardado puede no tenerlos)
 export const porItem = (s: Extract<Sub, { tipo: "adivinar" }>) => (s.modo ?? "porItem") === "porItem";
 export const segundosItem = (s: Extract<Sub, { tipo: "adivinar" }>) => s.segundosItem ?? 20;
+/** Integrantes de un equipo, limpios («Ana, , Luis » → Ana, Luis). */
+export const miembros = (e: Pick<Equipo, "miembros">) => (e.miembros ?? []).map((m) => m.trim()).filter(Boolean);
+
 export const tarjetaEnTv = (s: Extract<Sub, { tipo: "tarjetas" }>) => s.tarjetaEnTv ?? true;
 export const fragmento = (s: Extract<Sub, { tipo: "cancion" }>) => s.fragmento ?? 20;
+
+/** Lo que ven la TV y los votantes de la votación (sin saber quién gana hasta revelarlo). */
+export interface VotacionPublica {
+  estado: Votacion["estado"];
+  participantes: string[];
+  candidatos: string[];
+  votaron: string[]; // quién ha votado ya (no a quién)
+  ronda: number;
+  paso: number;
+  totalPasos: number;
+  revelados: { puesto: number; nombres: string[]; votos: number }[]; // de peor a mejor
+}

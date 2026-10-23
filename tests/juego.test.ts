@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { clasificar, coincide, puntosPrecio, puntosTest, totales } from "../shared/puntuacion.ts";
-import { contenidoInicial } from "../server/contenido-inicial.ts";
+import { contenidoInicial as inicial } from "../server/contenido-inicial.ts";
+
+/** Los tests de reglas se escribieron con 4 equipos (rojo, azul, verde, amarillo). */
+const contenidoInicial = () => {
+  const c = inicial();
+  c.equipos = c.equipos.slice(0, 4);
+  return c;
+};
 import { estadoVacio, Juego } from "../server/juego.ts";
 
 const T = [10, 5, 3, 1];
@@ -48,8 +55,11 @@ function partida() {
 describe("Juego", () => {
   it("kahoot: acierto + plus por rapidez, se revela solo cuando contestan todos y el marcador va en directo", () => {
     const { j, c, avanza } = partida();
-    const sub = c.pruebas[0].subs[0];
-    if (sub.tipo !== "test") throw new Error();
+    // El Kahoot de fábrica es el del cumpleañero (externo); aquí se prueban las preguntas propias
+    const ext = c.pruebas[0].subs[0];
+    if (ext.tipo !== "externo" || ext.respaldo?.tipo !== "test") throw new Error();
+    const sub = ext.respaldo;
+    c.pruebas[0].subs[0] = sub;
     sub.preguntas = [{ texto: "x", opciones: ["a", "b", "c", "d"], correcta: 2 }];
     j.host({ t: "ir", subId: "kahoot" });
     j.host({ t: "empezar" });

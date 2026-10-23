@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Contenido } from "../../shared/tipos.ts";
 import { Icono } from "../components/iconos.tsx";
 import { useTic } from "../socket.ts";
+import { revisarDisfraces } from "../../shared/revision.ts";
 import { Campo, Texto } from "./admin/campos.tsx";
-import { EditorSub } from "./admin/Editores.tsx";
+import { EditorSub, type ApiSpotify } from "./admin/Editores.tsx";
 import { Portada } from "./admin/Portada.tsx";
 import { usePin } from "./Presentador.tsx";
 
@@ -29,12 +30,29 @@ async function subir(pin: string, f: File): Promise<string> {
 
 type EstadoGuardado = { t: "guardado"; en: number } | { t: "pendiente" } | { t: "guardando" } | { t: "error"; msg: string } | { t: "conflicto"; msg: string };
 
+const COLORES = [["Rojo", "#ef4444"], ["Azul", "#3b82f6"], ["Verde", "#22c55e"], ["Amarillo", "#eab308"], ["Morado", "#a855f7"], ["Naranja", "#f97316"], ["Rosa", "#ec4899"], ["Turquesa", "#14b8a6"]];
+
+/** Equipo nuevo con el primer color y nombre libres. */
+function nuevoEquipo(equipos: Contenido["equipos"]): Contenido["equipos"][number] {
+  const usado = (n: string, col: string) => equipos.some((e) => e.color.toLowerCase() === col || e.nombre.toLocaleLowerCase("es") === n.toLocaleLowerCase("es"));
+  const [nombre, color] = COLORES.find(([n, col]) => !usado(n, col)) ?? [`Equipo ${equipos.length + 1}`, "#94a3b8"];
+  return { id: `eq-${Date.now().toString(36)}`, nombre, color };
+}
+
 export function Admin() {
   const { pin, ok, pedir, salir } = usePin();
   const [c, setC] = useState<Contenido | null>(null);
   const [guardado, setGuardado] = useState<EstadoGuardado>({ t: "guardado", en: Date.now() });
   const [error, setError] = useState<string | undefined>();
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [spotifyEstado, setSpotifyEstado] = useState<ApiSpotify["estado"]>(null);
+  // Vuelta de Spotify tras conectar la cuenta: /admin?spotify=ok|error&msg=…
+  const [avisoSpotify, setAvisoSpotify] = useState<{ ok: boolean; t: string } | null>(() => {
+    const q = new URLSearchParams(location.search);
+    if (!q.get("spotify")) return null;
+    history.replaceState(null, "", "/admin");
+    return q.get("spotify") === "ok" ? { ok: true, t: "Spotify conectado. Ya puedes cargar listas en las rondas de canciones." } : { ok: false, t: `No se ha podido conectar Spotify: ${q.get("msg") ?? ""}` };
+  });
   const version = useRef(0); // sube con cada cambio: si cambia mientras se guarda, queda pendiente
   const cRef = useRef<Contenido | null>(null);
   cRef.current = c;
@@ -50,6 +68,12 @@ export function Admin() {
           salir();
         } else setGuardado({ t: "error", msg: e.message });
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ok]);
+
+  useEffect(() => {
+    if (!ok) return;
+    api<ApiSpotify["estado"]>(pin, "GET", "/api/admin/spotify/estado").then(setSpotifyEstado).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ok]);
 
@@ -93,6 +117,18 @@ export function Admin() {
     setGuardado({ t: "pendiente" });
   };
   const up = (f: File) => subir(pin, f);
+  const apiSpotify: ApiSpotify = {
+    estado: spotifyEstado,
+    conectar: async () => {
+      try {
+        const { url } = await api<{ url: string }>(pin, "POST", "/api/admin/spotify/conectar");
+        location.href = url;
+      } catch (e) {
+        setAvisoSpotify({ ok: false, t: (e as Error).message });
+      }
+    },
+    lista: (url) => api(pin, "POST", "/api/admin/spotify/lista", { url }),
+  };
   const ir = (subId: string) => {
     setAbierta(subId);
     requestAnimationFrame(() => document.getElementById(`ronda-${subId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -124,19 +160,76 @@ export function Admin() {
         </div>
       )}
 
+      {avisoSpotify && <div className={avisoSpotify.ok ? "panel" : "error"} role="status" style={avisoSpotify.ok ? { borderColor: "#1db954" } : undefined}>{avisoSpotify.t}</div>}
       <Portada c={c} onIr={ir} />
 
       <div className="panel col">
         <h3>Datos generales</h3>
         <Campo etiqueta="Nombre del concurso (sale en la TV)"><Texto v={c.titulo} on={(titulo) => cambiar({ ...c, titulo })} /></Campo>
-        <div className="campo-etiqueta">Equipos (también los pueden renombrar ellos desde el móvil)</div>
-        {c.equipos.map((q, i) => (
-          <div key={q.id} className="fila">
-            <input type="color" aria-label={`Color del equipo ${i + 1}`} value={q.color} onChange={(e) => cambiar({ ...c, equipos: c.equipos.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)) })} />
-            <input className="campo" style={{ flex: 1 }} aria-label={`Nombre del equipo ${i + 1}`} value={q.nombre} onChange={(e) => cambiar({ ...c, equipos: c.equipos.map((x, j) => (j === i ? { ...x, nombre: e.target.value } : x)) })} />
-          </div>
-        ))}
+        <div className="campo-etiqueta">Equipos: nombre y quién juega en cada uno (el nombre también lo pueden cambiar ellos desde el móvil)</div>
+        {c.equipos.map((q, i) => {
+          const setEq = (cambio: Partial<typeof q>) => cambiar({ ...c, equipos: c.equipos.map((x, j) => (j === i ? { ...x, ...cambio } : x)) });
+          return (
+            <div key={q.id} className="fila equipo-admin">
+              <input type="color" aria-label={`Color del equipo ${i + 1}`} value={q.color} onChange={(e) => setEq({ color: e.target.value })} />
+              <input className="campo" style={{ flex: "1 1 160px" }} aria-label={`Nombre del equipo ${i + 1}`} value={q.nombre} onChange={(e) => setEq({ nombre: e.target.value })} />
+              <input
+                className="campo"
+                style={{ flex: "3 1 260px" }}
+                aria-label={`Integrantes del equipo ${i + 1}`}
+                placeholder="Integrantes, separados por comas: Ana, Luis, Marta"
+                value={(q.miembros ?? []).join(",")}
+                onChange={(e) => setEq({ miembros: e.target.value.split(",") })}
+              />
+              {c.equipos.length > 2 && (
+                <button
+                  type="button"
+                  className="btn peq"
+                  aria-label={`Quitar el equipo ${q.nombre}`}
+                  onClick={() => confirm(`¿Quitar el equipo «${q.nombre}»? Si ya tiene puntos, se pierden.`) && cambiar({ ...c, equipos: c.equipos.filter((_, j) => j !== i) })}
+                >
+                  <Icono n="basura" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {c.equipos.length < 8 && (
+          <button type="button" className="btn peq" style={{ alignSelf: "flex-start" }} onClick={() => cambiar({ ...c, equipos: [...c.equipos, nuevoEquipo(c.equipos)] })}>
+            <Icono n="mas" /> Añadir equipo
+          </button>
+        )}
       </div>
+
+      <section id="ronda-disfraces" className="panel col">
+        <div className="fila" style={{ justifyContent: "space-between" }}>
+          <h3>Concurso de disfraces (al final)</h3>
+          {revisarDisfraces(c).length ? <span className="estado-falta">Falta: {revisarDisfraces(c)[0]}</span> : <span className="estado-listo"><Icono n="check" /> Lista</span>}
+        </div>
+        <details className="guia" open>
+          <summary><Icono n="info" /> Cómo funciona</summary>
+          <dl>
+            <dt>Qué es</dt>
+            <dd>Después del concurso, todos votan el disfraz que más les ha gustado.</dd>
+            <dt>Cómo se juega el día</dt>
+            <dd>
+              El presentador abre la votación y la TV enseña un QR. Cada invitado lo escanea con su móvil, elige su nombre y vota a otro (no vale votarse a sí mismo; un
+              voto por persona). Al cerrar, la TV revela el 3º, el 2º y el ganador con suspense.
+            </dd>
+            <dt>Qué escribir aquí</dt>
+            <dd>Los nombres de todos los que van disfrazados (y votan), uno por línea. Si hay dos con el mismo nombre, añade la inicial del apellido («Ana G.», «Ana M.»).</dd>
+          </dl>
+        </details>
+        <Campo etiqueta="Invitados disfrazados (uno por línea)" ayuda={`${(c.disfraces?.participantes ?? []).filter((x) => x.trim()).length} en la lista`}>
+          <textarea
+            className={`campo ${revisarDisfraces(c).length ? "falta" : ""}`}
+            rows={8}
+            value={(c.disfraces?.participantes ?? []).join("\n")}
+            onChange={(e) => cambiar({ ...c, disfraces: { participantes: e.target.value.split("\n") } })}
+            placeholder={"Ana\nLuis\nMarta…"}
+          />
+        </Campo>
+      </section>
 
       {c.pruebas.map((pr, pi) => {
         const setPr = (p: typeof pr) => cambiar({ ...c, pruebas: c.pruebas.map((x, j) => (j === pi ? p : x)) });
@@ -154,6 +247,7 @@ export function Admin() {
                 abierto={abierta === s.id}
                 onAbrir={(a) => setAbierta(a ? s.id : abierta === s.id ? null : abierta)}
                 subir={up}
+                spotify={apiSpotify}
                 onChange={(ns) => setPr({ ...pr, subs: pr.subs.map((x, j) => (j === si ? ns : x)) })}
               />
             ))}

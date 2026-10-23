@@ -1,4 +1,4 @@
-import { chromium, devices, expect, test, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test";
+import { chromium, devices, expect, test, type Browser, type BrowserContext, type APIRequestContext, type BrowserContextOptions, type Page } from "@playwright/test";
 
 /** Errores de JavaScript vistos en cualquier página del test: si hay alguno, el test falla. */
 const errores: string[] = [];
@@ -26,6 +26,7 @@ export function ganchos({ limpiar = true } = {}) {
     // Cada test empieza con el contenido de fábrica y la partida a cero (aunque se repita sobre el mismo servidor)
     const h = { "x-pin": "1234" };
     await request.post("/api/admin/restaurar", { headers: h });
+    await cuatroEquipos(request);
     await request.post("/api/admin/reiniciar", { headers: h });
   });
   test.afterEach(async () => {
@@ -37,6 +38,14 @@ export function ganchos({ limpiar = true } = {}) {
     await chromeTv?.close();
     chromeTv = null;
   });
+}
+
+/** El contenido de serie trae 5 equipos; casi todos los tests se escribieron con 4 móviles (rojo, azul, verde, amarillo). */
+export async function cuatroEquipos(request: APIRequestContext) {
+  const h = { "x-pin": "1234" };
+  const c = await (await request.get("/api/admin/contenido", { headers: h })).json();
+  c.equipos = c.equipos.slice(0, 4);
+  expect((await request.put("/api/admin/contenido", { headers: h, data: c })).status()).toBe(200);
 }
 
 export const esSafari = () => test.info().project.name === "safari";

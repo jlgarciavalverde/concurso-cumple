@@ -12,7 +12,9 @@ export default defineConfig({
     { name: "safari", use: { browserName: "webkit" }, timeout: 240_000 }, // WebKit es bastante más lento
   ],
   webServer: {
-    command: "rm -rf .e2e-datos && DATA_DIR=.e2e-datos PORT=3457 PIN=1234 node dist/server.js",
+    // Spotify apunta a un Spotify simulado en :3463 (lo levanta e2e/final.spec.ts)
+    command:
+      "rm -rf .e2e-datos && DATA_DIR=.e2e-datos PORT=3457 PIN=1234 PUBLIC_URL=http://localhost:3457 SPOTIFY_CLIENT_ID=prueba SPOTIFY_CLIENT_SECRET=prueba SPOTIFY_ACCOUNTS=http://localhost:3463 SPOTIFY_API=http://localhost:3463 node dist/server.js",
     url: "http://localhost:3457/health",
     reuseExistingServer: false,
   },

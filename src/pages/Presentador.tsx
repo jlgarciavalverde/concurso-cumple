@@ -65,6 +65,15 @@ export function Presentador() {
             ))}
           </div>
         ))}
+        {(c.disfraces?.participantes.length ?? 0) > 0 && (
+          <>
+            <div className="prueba">Al final</div>
+            <button className={p.vista === "votacion" ? "on" : ""} onClick={() => a({ t: "vista", v: "votacion" })}>
+              <span>Votación de disfraces</span>
+              <span>{h.estado.votacion?.estado === "cerrada" ? <Icono n="check" /> : null}</span>
+            </button>
+          </>
+        )}
         <a className="btn peq" href="/admin" style={{ marginTop: 12, textAlign: "center", textDecoration: "none" }}><Icono n="lapiz" /> Editar contenido</a>
       </nav>
 
@@ -94,13 +103,16 @@ export function Presentador() {
             <button className="btn peq" disabled={!h.deshacer} onClick={() => a({ t: "deshacer" })}><Icono n="deshacer" /> Deshacer</button>
           </div>
           <ControlTv h={h} a={a} recargar={() => confirm("¿Recargar la TV?") && enviar("tvRecargar", null)} />
+          <EstadoSpotify h={h} autorizar={() => enviar("spotifyConfiarTv", null)} />
           {p.vista === "podio" && <PodioControl h={h} a={a} />}
           <div className="atajos suave">
             Atajos: <kbd>Espacio</kbd> siguiente paso · <kbd>Z</kbd> deshacer · <kbd>J</kbd> juego · <kbd>M</kbd> marcador · <kbd>P</kbd> podio
           </div>
         </div>
 
-        {actual ? (
+        {p.vista === "votacion" ? (
+          <ControlVotacion h={h} a={a} />
+        ) : actual ? (
           <Control h={h} sub={actual.s} titulo={`Prueba ${c.pruebas.indexOf(actual.pr) + 1} · ${actual.pr.titulo}`} a={a} desfase={desfase} />
         ) : (
           <div className="panel col">
@@ -160,6 +172,7 @@ function Control({ h, sub, titulo, a, desfase }: { h: VistaHost; sub: Sub; titul
           {sub.tipo === "cancion" && <ControlCancion h={h} sub={sub} a={a} />}
           {sub.tipo === "tarjetas" && <ControlTarjetas h={h} sub={sub} a={a} />}
           {sub.tipo === "manual" && <ControlManual h={h} sub={sub} a={a} desfase={desfase} />}
+          {sub.tipo === "externo" && <ControlExterno h={h} sub={sub} a={a} />}
           <div className="fila">
             {v.fin !== null && <button className="btn peq" onClick={() => a({ t: "mas", segundos: 15 })}>+15 s</button>}
             <button className="btn peq" onClick={() => a({ t: "resultado" })}><Icono n="bandera" /> Terminar ya y ver resultados</button>
@@ -197,6 +210,8 @@ function textoFase(h: VistaHost, sub: Sub): string {
       return "Turno en marcha";
     case "manual":
       return "En juego";
+    case "externo":
+      return h.publico.externo?.pin ? `PIN ${h.publico.externo.pin} en la TV` : "Esperando el PIN";
     case "adivinar":
       if (!porItem(sub)) return `Entregadas ${Object.values(v.hojas).filter((x) => x.entregada).length}/${n}`;
       return `Esperando respuestas (${h.publico.contestados.length}/${n})`;
@@ -471,7 +486,8 @@ function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo:
       <div className="fila">
         <span className="secreto">{c?.titulo}</span>
         <span className="suave">— {c?.artista}</span>
-        {!c?.audio && <span className="chip"><Icono n="aviso" /> sin MP3: ponla tú</span>}
+        {!c?.audio && !c?.spotify && <span className="chip"><Icono n="aviso" /> sin MP3 ni Spotify: ponla tú</span>}
+        {!c?.audio && c?.spotify && !h.spotify?.tvs.some((t) => t.listo) && <span className="chip" style={{ background: "#3a0f1a" }}><Icono n="aviso" /> Spotify no está listo en la TV: ponla tú o revisa arriba</span>}
       </div>
       <div className="fila">
         <button className="btn" onClick={() => a({ t: "sonar", on: !v.sonando })}>{v.sonando ? "Pausa" : "Seguir"}</button>
@@ -583,7 +599,7 @@ function ControlManual({ h, sub, a, desfase }: { h: VistaHost; sub: Extract<Sub,
 /** Valores crudos editables a mano. */
 function Crudos({ h, sub, a }: { h: VistaHost; sub: Sub; a: A }) {
   const crudo = h.estado.crudo[sub.id] ?? {};
-  const etiqueta = sub.tipo === "manual" ? sub.medida : sub.tipo === "test" && sub.puntuacion === "ranking" ? "Puntos" : "Aciertos";
+  const etiqueta = sub.tipo === "manual" ? sub.medida : sub.tipo === "externo" ? "Puesto en Kahoot (1, 2, 3…)" : sub.tipo === "test" && sub.puntuacion === "ranking" ? "Puntos" : "Aciertos";
   return (
     <table className="tabla">
       <thead>
@@ -715,6 +731,31 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
   );
 }
 
+/** Spotify: ¿está conectada la cuenta y la TV lista para sonar? Solo sale si alguna canción usa Spotify. */
+function EstadoSpotify({ h, autorizar }: { h: VistaHost; autorizar: () => void }) {
+  const usa = h.contenido.pruebas.some((p) => p.subs.some((s) => s.tipo === "cancion" && s.canciones.some((c) => c.spotify && !c.audio)));
+  const sp = h.spotify;
+  if (!usa || !sp) return null;
+  const tv = sp.tvs.find((t) => t.listo) ?? sp.tvs.find((t) => t.autorizada) ?? sp.tvs[0];
+  let texto: string;
+  let mal = true;
+  if (!sp.conectado) texto = "Spotify sin conectar (hazlo en /admin)";
+  else if (sp.premium === false) texto = `La cuenta ${sp.cuenta} no es Premium: Spotify no sonará`;
+  else if (!h.tv) texto = "Spotify conectado · falta abrir la TV";
+  else if (!tv?.autorizada) texto = "Spotify conectado · la TV no está autorizada";
+  else if (tv.error) texto = `Spotify en la TV: ${tv.error}`;
+  else if (!tv.listo) texto = "Spotify: la TV se está preparando…";
+  else ((texto = `Spotify listo en la TV (${sp.cuenta})`), (mal = false));
+  return (
+    <div className="fila" style={{ width: "100%" }}>
+      <span className="chip" style={mal ? { background: "#3a0f1a" } : undefined}><Icono n="nota" /> {texto}</span>
+      {sp.conectado && h.tv > 0 && !tv?.autorizada && (
+        <button className="btn peq prim" onClick={autorizar}>Autorizar la TV para Spotify</button>
+      )}
+    </div>
+  );
+}
+
 /** El final: revelar puestos de último a primero (Espacio). */
 function PodioControl({ h, a }: { h: VistaHost; a: A }) {
   const grupos = gruposPodio(h.publico.equipos);
@@ -728,6 +769,99 @@ function PodioControl({ h, a }: { h: VistaHost; a: A }) {
       <button className="btn oro grande" data-principal onClick={() => a({ t: "podioPaso" })}>
         {paso === grupos.length - 1 ? `¡Revelar al GANADOR!${empate}` : `Revelar el ${sig.puesto}º puesto${empate}`}
       </button>
+    </div>
+  );
+}
+
+/** Kahoot del cumpleañero: escribir el PIN que le da Kahoot al lanzarlo y, al acabar, el puesto de cada equipo. */
+function ControlExterno({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "externo" }>; a: A }) {
+  const pin = h.publico.externo?.pin ?? "";
+  const [txt, setTxt] = useState(pin);
+  useEffect(() => setTxt(pin), [pin]);
+  return (
+    <>
+      <div className="panel col" style={{ background: "var(--bg2)" }}>
+        <b>1. Cuando el cumpleañero lance su Kahoot, escribe aquí el PIN que le sale:</b>
+        <form
+          className="fila"
+          onSubmit={(e) => {
+            e.preventDefault();
+            a({ t: "pin", pin: txt });
+          }}
+        >
+          <input className="campo" style={{ maxWidth: 220, fontFamily: "var(--titular)", fontSize: "1.6em", letterSpacing: "0.1em" }} inputMode="numeric" placeholder="PIN" aria-label="PIN del Kahoot" value={txt} onChange={(e) => setTxt(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+          <button className="btn prim" disabled={!txt}><Icono n="tv" /> Enseñar en la TV</button>
+        </form>
+        {pin && <span className="suave">En la TV: PIN {pin} y un QR que lleva directo a Kahoot. Los móviles de los equipos tienen un botón «Abrir Kahoot».</span>}
+      </div>
+      <div className="panel col" style={{ background: "var(--bg2)" }}>
+        <b>2. Al acabar el Kahoot, apunta el puesto de cada equipo en el podio de Kahoot:</b>
+        <Crudos h={h} sub={sub} a={a} />
+        <span className="suave">1º = 10 puntos, 2º = 5, 3º = 3, 4º = 1. El que no tenga puesto no suma.</span>
+        <button className="btn prim grande" data-principal style={{ alignSelf: "flex-start" }} onClick={() => a({ t: "siguiente" })}><Icono n="bandera" /> Ver resultados</button>
+      </div>
+    </>
+  );
+}
+
+/** Votación del mejor disfraz: abrir, ver cuántos han votado, cerrar y revelar con suspense. */
+function ControlVotacion({ h, a }: { h: VistaHost; a: A }) {
+  const v = h.publico.votacion;
+  if (!v || !v.participantes.length)
+    return (
+      <div className="panel col">
+        <h2>Votación de disfraces</h2>
+        <div className="error">No hay lista de invitados. Añádela en <a href="/admin" style={{ color: "var(--oro)" }}>/admin</a> («Concurso de disfraces»).</div>
+      </div>
+    );
+  const faltan = v.participantes.filter((n) => !v.votaron.includes(n));
+  const final = v.estado === "cerrada" && v.totalPasos > 0 && v.paso >= v.totalPasos;
+  const empate = final && (v.revelados.at(-1)?.nombres.length ?? 0) > 1;
+  return (
+    <div className="panel col">
+      <div className="fila" style={{ justifyContent: "space-between" }}>
+        <div>
+          <div className="suave">Al final del concurso</div>
+          <h2>Votación de disfraces{v.ronda > 1 ? ` · desempate` : ""}</h2>
+        </div>
+        <span className="chip">{v.estado === "preparada" ? "Sin abrir" : v.estado === "abierta" ? `Abierta · ${v.votaron.length}/${v.participantes.length} han votado` : "Cerrada"}</span>
+      </div>
+      <p className="suave" style={{ margin: 0 }}>
+        La TV enseña un QR: cada invitado vota con su móvil al disfraz que más le ha gustado (uno por persona, sin votarse a sí mismo). Aquí ves cuántos han votado,
+        pero no quién va ganando.
+      </p>
+      {v.estado === "preparada" && (
+        <button className="btn prim grande" data-principal style={{ alignSelf: "flex-start" }} onClick={() => a({ t: "votacion", op: "abrir" })}>
+          <Icono n="play" /> Abrir la votación
+        </button>
+      )}
+      {v.estado === "abierta" && (
+        <>
+          {faltan.length > 0 && <div className="suave">Faltan por votar: {faltan.join(", ")}</div>}
+          <div className="fila">
+            <button className="btn oro grande" data-principal onClick={() => a({ t: "votacion", op: "cerrar" })}><Icono n="candado" /> Cerrar la votación</button>
+          </div>
+        </>
+      )}
+      {v.estado === "cerrada" && !final && (
+        <button className="btn oro grande" data-principal style={{ alignSelf: "flex-start" }} disabled={!v.totalPasos} onClick={() => a({ t: "votacion", op: "revelar" })}>
+          <Icono n="bocina" /> {!v.totalPasos ? "Nadie ha votado" : v.paso === v.totalPasos - 1 ? "¡Revelar el GANADOR!" : "Revelar el siguiente puesto"}
+        </button>
+      )}
+      {final && (
+        <div className="fila">
+          <span className="chip"><Icono n="trofeo" /> Ganador: {v.revelados.at(-1)?.nombres.join(" y ")} ({v.revelados.at(-1)?.votos} votos)</span>
+          {empate && <button className="btn prim" onClick={() => a({ t: "votacion", op: "desempatar" })}>Desempatar entre ellos</button>}
+        </div>
+      )}
+      <details>
+        <summary className="suave">Opciones</summary>
+        <div className="fila" style={{ marginTop: 8 }}>
+          {v.estado === "cerrada" && <button className="btn peq" onClick={() => a({ t: "votacion", op: "abrir" })}>Reabrir la votación</button>}
+          <button className="btn peq ko" onClick={() => confirm("¿Borrar todos los votos y empezar de cero?") && a({ t: "votacion", op: "reiniciar" })}>Borrar votos</button>
+          <button className="btn peq" onClick={() => a({ t: "vista", v: "juego" })}>Volver al juego</button>
+        </div>
+      </details>
     </div>
   );
 }

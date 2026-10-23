@@ -1,7 +1,14 @@
 // Matriz de casos raros por prueba: lo que puede pasar el día del cumple.
 import { describe, expect, it } from "vitest";
 import { leerPrecio, totales } from "../shared/puntuacion.ts";
-import { contenidoInicial } from "../server/contenido-inicial.ts";
+import { contenidoInicial as inicial } from "../server/contenido-inicial.ts";
+
+/** Los tests de reglas se escribieron con 4 equipos (rojo, azul, verde, amarillo). */
+const contenidoInicial = () => {
+  const c = inicial();
+  c.equipos = c.equipos.slice(0, 4);
+  return c;
+};
 import { estadoVacio, Juego, normalizarEstado } from "../server/juego.ts";
 import { validarContenido } from "../server/validar.ts";
 import type { Sub } from "../shared/tipos.ts";
@@ -74,8 +81,11 @@ describe("Kahoot / cultura general", () => {
   });
 
   it("preguntas de 2 y 3 opciones", () => {
-    const { j, sub } = partida();
-    const k = sub("kahoot", "test");
+    const { j, c } = partida();
+    const ext = c.pruebas[0].subs[0];
+    if (ext.tipo !== "externo" || ext.respaldo?.tipo !== "test") throw new Error();
+    const k = ext.respaldo;
+    c.pruebas[0].subs[0] = k;
     k.preguntas = [
       { texto: "¿Sí o no?", opciones: ["Sí", "No"], correcta: 1 },
       { texto: "¿Cuál?", opciones: ["a", "b", "c"], correcta: 2 },
@@ -348,9 +358,9 @@ describe("Equipos y contenido", () => {
     c.equipos[1].nombre = "rojo";
     expect(validarContenido(c)).toContain("se llaman");
     const d = contenidoInicial();
-    const k = d.pruebas[0].subs[0];
+    const k = d.pruebas[5].subs[0];
     if (k.tipo === "test") k.preguntas[2].opciones = ["solo una"];
-    expect(validarContenido(d)).toMatch(/pregunta 3: necesita al menos 2 opciones/);
+    expect(validarContenido(d)).toMatch(/Cultura general», pregunta 3: necesita al menos 2 opciones/);
     const e = contenidoInicial();
     const t = e.pruebas[4].subs[2];
     if (t.tipo === "tarjetas") t.tarjetas[0].palabra = "";
@@ -420,6 +430,22 @@ describe("Pulsador justo", () => {
   });
 });
 
+describe("Cinco equipos", () => {
+  it("el de serie trae 5; con la tabla 10/5/3/1 el 5º no suma; los integrantes se validan", () => {
+    const c = inicial();
+    expect(c.equipos.map((e) => e.id)).toEqual(["rojo", "azul", "verde", "amarillo", "morado"]);
+    expect(validarContenido(c)).toBeNull();
+    const j = new Juego(c, estadoVacio(), () => 1, 0);
+    j.host({ t: "ir", subId: "torre" });
+    for (const [eq, v] of [["rojo", 5], ["azul", 4], ["verde", 3], ["amarillo", 2], ["morado", 1]] as const) j.host({ t: "crudo", equipo: eq, valor: v });
+    expect(j.publico().ranking).toEqual({ rojo: 10, azul: 5, verde: 3, amarillo: 1, morado: 0 });
+    c.equipos[4].miembros = ["Ana", " Luis "];
+    expect(validarContenido(c)).toBeNull();
+    c.equipos[4].miembros = [42 as unknown as string];
+    expect(validarContenido(c)).toMatch(/integrantes/);
+  });
+});
+
 describe("Partidas guardadas por versiones antiguas", () => {
   it("una hoja de la v0.1 (sin «hechos») no tumba el servidor al responder: regresión del fallo de olores", () => {
     const c = contenidoInicial();
@@ -442,5 +468,72 @@ describe("Partidas guardadas por versiones antiguas", () => {
   it("normalizar no toca una partida actual", () => {
     const e = estadoVacio();
     expect(normalizarEstado(structuredClone(e))).toEqual(e);
+  });
+});
+
+describe("Kahoot del cumpleañero (ronda externa)", () => {
+  it("el PIN sale en la TV y los puestos de Kahoot reparten 10/5/3/1", () => {
+    const { j, c } = partida();
+    j.host({ t: "ir", subId: "kahoot" });
+    expect(j.publico().externo).toEqual({ plataforma: "kahoot", pin: null });
+    j.host({ t: "pin", pin: " 123 456 7 " });
+    expect(j.publico().externo?.pin).toBe("1234567");
+    j.host({ t: "empezar" });
+    j.host({ t: "crudo", equipo: "azul", valor: 1 });
+    j.host({ t: "crudo", equipo: "rojo", valor: 2 });
+    j.host({ t: "crudo", equipo: "verde", valor: 3 });
+    expect(totales(c, j.estado)).toEqual({ rojo: 5, azul: 10, verde: 3, amarillo: 0 }); // amarillo sin puesto: 0
+    j.host({ t: "siguiente" });
+    expect(j.estado.vivo.fase).toBe("resultado");
+  });
+});
+
+describe("Votación del mejor disfraz", () => {
+  function conInvitados(n = ["Ana", "Luis", "Marta", "Pepe", "Sara", "Toni"]) {
+    const r = partida();
+    r.c.disfraces = { participantes: n };
+    return r;
+  }
+
+  it("cerrada no admite votos; abierta: uno por persona, no a uno mismo, solo de la lista", () => {
+    const { j } = conInvitados();
+    expect(j.votar("Ana", "Luis")).toMatch(/no está abierta/);
+    j.host({ t: "votacion", op: "abrir" });
+    expect(j.estado.vivo.vista).toBe("votacion");
+    expect(j.votar("Ana", "Luis")).toBeNull();
+    expect(j.votar("Ana", "Marta")).toMatch(/Ya has votado/);
+    expect(j.votar("Luis", "Luis")).toMatch(/a ti mismo/);
+    expect(j.votar("Intruso", "Luis")).toMatch(/No estás en la lista/);
+    expect(j.votar("Marta", "Nadie")).toMatch(/no está en la votación/);
+    expect(j.publicoVotacion().votaron).toEqual(["Ana"]);
+  });
+
+  it("se revela de 3º a 1º y no se sabe quién gana hasta el final", () => {
+    const { j } = conInvitados();
+    j.host({ t: "votacion", op: "abrir" });
+    for (const [a, b] of [["Ana", "Luis"], ["Marta", "Luis"], ["Pepe", "Luis"], ["Sara", "Marta"], ["Toni", "Marta"], ["Luis", "Pepe"]]) j.votar(a, b);
+    expect(j.publicoVotacion().revelados).toEqual([]);
+    j.host({ t: "votacion", op: "revelar" });
+    expect(j.estado.votacion?.estado).toBe("cerrada");
+    expect(j.publicoVotacion().revelados).toEqual([{ puesto: 3, nombres: ["Pepe"], votos: 1 }]);
+    j.host({ t: "votacion", op: "revelar" });
+    j.host({ t: "votacion", op: "revelar" });
+    j.host({ t: "votacion", op: "revelar" }); // no pasa del último
+    expect(j.publicoVotacion().revelados.at(-1)).toEqual({ puesto: 1, nombres: ["Luis"], votos: 3 });
+    expect(j.votar("Ana", "Pepe")).toMatch(/no está abierta/);
+  });
+
+  it("empate en el primer puesto: se revelan juntos y se puede desempatar solo entre ellos", () => {
+    const { j } = conInvitados();
+    j.host({ t: "votacion", op: "abrir" });
+    for (const [a, b] of [["Ana", "Luis"], ["Marta", "Luis"], ["Pepe", "Sara"], ["Toni", "Sara"]]) j.votar(a, b);
+    j.host({ t: "votacion", op: "cerrar" });
+    for (let i = 0; i < 3; i++) j.host({ t: "votacion", op: "revelar" });
+    expect(j.publicoVotacion().revelados.at(-1)).toEqual({ puesto: 1, nombres: ["Luis", "Sara"], votos: 2 });
+    j.host({ t: "votacion", op: "desempatar" });
+    const p = j.publicoVotacion();
+    expect(p).toMatchObject({ estado: "abierta", ronda: 2, candidatos: ["Luis", "Sara"], votaron: [] });
+    expect(j.votar("Ana", "Marta")).toMatch(/no está en la votación/);
+    expect(j.votar("Ana", "Sara")).toBeNull();
   });
 });

@@ -39,9 +39,9 @@ export function revisarSub(s: Sub): string[] {
     }
     case "cancion": {
       if (!s.canciones.length) falta.push("no tiene canciones");
-      const sinMp3 = s.canciones.filter((c) => !c.audio).length;
+      const sinMp3 = s.canciones.filter((c) => !c.audio && !c.spotify).length;
       const sinTitulo = s.canciones.filter((c) => vacio(c.titulo)).length;
-      if (sinMp3) falta.push(`${sinMp3} de ${s.canciones.length} canciones sin MP3`);
+      if (sinMp3) falta.push(`${sinMp3} de ${s.canciones.length} canciones sin audio (ni MP3 ni Spotify)`);
       if (sinTitulo) falta.push(`${plural(sinTitulo, "canción", "canciones")} sin título`);
       break;
     }
@@ -57,6 +57,8 @@ export function revisarSub(s: Sub): string[] {
     case "manual":
       if (vacio(s.descripcion)) falta.push("falta explicar en qué consiste");
       break;
+    case "externo":
+      break; // el PIN se pone el día, en el panel
   }
   if (vacio(s.titulo)) falta.unshift("falta el título");
   return falta;
@@ -78,6 +80,19 @@ export function preparacion(c: Contenido): string[] {
     if (s.tipo === "tarjetas" && s.modo === "dibujo") lista.push(`«${s.titulo}»: papel grande o pizarra y rotuladores`);
     if (s.tipo === "manual" && !/vaso/i.test(s.titulo + (s.descripcion ?? ""))) lista.push(`«${s.titulo}»: lo que necesite la prueba (${s.descripcion?.includes(PLANTILLA) ? "aún sin explicar" : s.descripcion ?? ""})`);
   }
+  if (subs.some((s) => s.tipo === "externo")) lista.push("El cumpleañero con su Kahoot listo para lanzarlo desde su cuenta (el PIN se escribe en el panel del presentador)");
+  if (c.disfraces?.participantes.length) lista.push(`Concurso de disfraces: cada invitado vota con su móvil (${c.disfraces.participantes.length} en la lista)`);
+  if (subs.some((s) => s.tipo === "cancion" && s.canciones.some((x) => x.spotify))) lista.push("Spotify conectado en /admin y la TV abierta con el lanzador (hace de reproductor)");
   if (subs.some((s) => s.tipo === "cancion")) lista.push("Altavoz o el sonido de la TV a buen volumen (la música sale por la TV)");
   return lista;
+}
+
+/** Lo que le falta al concurso de disfraces. */
+export function revisarDisfraces(c: Contenido): string[] {
+  const n = (c.disfraces?.participantes ?? []).filter((x) => x.trim()).length;
+  if (!n) return ["falta la lista de invitados (uno por línea)"];
+  if (n < 2) return ["hacen falta al menos 2 personas"];
+  const nombres = (c.disfraces?.participantes ?? []).map((x) => x.trim().toLocaleLowerCase("es")).filter(Boolean);
+  if (new Set(nombres).size !== nombres.length) return ["hay nombres repetidos (añade la inicial del apellido para distinguirlos)"];
+  return [];
 }

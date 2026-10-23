@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Icono, Insignia, ICONOS, type NombreIcono } from "../components/iconos.tsx";
-import type { Publico, VistaEquipo } from "../../shared/tipos.ts";
+import { miembros, type Publico, type VistaEquipo } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
 import { leerPrecio } from "../../shared/puntuacion.ts";
 import { conColor, Cuenta, equipoDe, euros, FORMAS, gruposPodio, posRosco, fmt, useWakeLock } from "../components/comun.tsx";
@@ -79,7 +79,10 @@ export function Jugar() {
                   if (!guardado.leer(`nombrado-${codigo}-${e.id}`)) setNombrando(true); // primera vez: que se pongan nombre
                 }}
               >
-                {e.nombre}
+                <span className="col" style={{ alignItems: "flex-start", gap: 2, textAlign: "left" }}>
+                  {e.nombre}
+                  {miembros(e).length > 0 && <small style={{ textTransform: "none", letterSpacing: 0, fontSize: "0.5em", fontWeight: 600 }}>{miembros(e).join(", ")}</small>}
+                </span>
                 <span style={{ fontWeight: 400, fontSize: "0.7em" }}>{e.conectados ? <><Icono n="telefono" /> {e.conectados}</> : ""}</span>
               </button>
             ))}
@@ -214,6 +217,13 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
   const s = v.sub;
   if (v.vista === "podio") return <PodioMovil v={v} />;
   if (v.vista === "marcador") return <><Espera icono="marcador" texto="Marcador en la pantalla" /><Posicion v={v} /></>;
+  if (v.vista === "votacion")
+    return (
+      <>
+        <Espera icono="trofeo" texto="¡Toca votar el mejor disfraz! Cada uno con su móvil." />
+        <a className="btn prim grande" href={`/votar?c=${v.codigo}`} style={{ textDecoration: "none" }}><Icono n="trofeo" /> Votar desde este móvil</a>
+      </>
+    );
   if (!s) return <><Espera icono="reloj" texto="Esperando a que empiece la siguiente prueba…" /><Posicion v={v} /></>;
   if (v.fase === "resultado") {
     const p = v.ranking?.[v.yo] ?? 0;
@@ -225,7 +235,7 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
       </>
     );
   }
-  if (v.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual")
+  if (v.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual" && s.tipo !== "externo")
     return (
       <>
         <Espera icono={String(s.pruebaNum)} texto={`Prueba ${s.pruebaNum} · ${s.pruebaTitulo}: ${s.titulo}`} />
@@ -243,6 +253,23 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
       return s.porItem ? <ItemMovil v={v} desfase={desfase} enviar={enviar} /> : <HojaMovil v={v} desfase={desfase} enviar={enviar} />;
     case "cancion":
       return <Pulsador v={v} enviar={enviar} />;
+    case "externo": {
+      const pin = v.externo?.pin;
+      const yo = equipoDe(v, v.yo);
+      return (
+        <>
+          <Espera icono="usuarios" texto={pin ? `Kahoot del cumpleañero · PIN ${pin}` : "Esperando a que el cumpleañero lance su Kahoot…"} />
+          {pin && (
+            <>
+              <a className="btn prim grande" href={`https://kahoot.it/?pin=${pin}&refer_method=link`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <Icono n="enlace" /> Abrir Kahoot
+              </a>
+              <div className="espera suave">Entrad con el nombre «{yo?.nombre}» (un solo móvil por equipo). Luego volved aquí.</div>
+            </>
+          )}
+        </>
+      );
+    }
     case "tarjetas":
     case "manual": {
       const t = equipoDe(v, v.turno);

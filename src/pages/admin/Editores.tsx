@@ -1,6 +1,7 @@
 // Editor de cada ronda: guía arriba, lo importante con etiquetas claras y lo técnico plegado.
 import type { Cancion, ItemAdivinar, PreguntaTest, Producto, Sub, Tarjeta } from "../../../shared/tipos.ts";
 import { BONUS_RAPIDEZ } from "../../../shared/puntuacion.ts";
+import { useState } from "react";
 import { revisarSub } from "../../../shared/revision.ts";
 import { FORMAS } from "../../components/comun.tsx";
 import { Icono } from "../../components/iconos.tsx";
@@ -30,7 +31,14 @@ function Guia({ sub }: { sub: Sub }) {
   );
 }
 
-export function EditorSub({ sub, onChange, subir, abierto, onAbrir, num }: { sub: Sub; onChange: (s: Sub) => void; subir: (f: File) => Promise<string>; abierto: boolean; onAbrir: (a: boolean) => void; num: string }) {
+/** Lo que el editor necesita de Spotify (lo da Admin.tsx, que tiene el PIN). */
+export interface ApiSpotify {
+  estado: { configurado: boolean; conectado: boolean; cuenta: string | null; premium: boolean | null } | null;
+  conectar: () => void;
+  lista: (url: string) => Promise<{ nombre: string; canciones: { titulo: string; artista: string; spotify: string; duracion: number }[] }>;
+}
+
+export function EditorSub({ sub, onChange, subir, abierto, onAbrir, num, spotify }: { sub: Sub; onChange: (s: Sub) => void; subir: (f: File) => Promise<string>; abierto: boolean; onAbrir: (a: boolean) => void; num: string; spotify: ApiSpotify }) {
   const falta = revisarSub(sub);
   const set = (p: Partial<Sub>) => onChange({ ...sub, ...p } as Sub);
   return (
@@ -49,18 +57,49 @@ export function EditorSub({ sub, onChange, subir, abierto, onAbrir, num }: { sub
               <Texto v={sub.descripcion} on={(descripcion) => set({ descripcion })} obligatorio={sub.tipo === "manual"} ph="Opcional" />
             </Campo>
           </div>
-          <Contenido sub={sub} set={set} subir={subir} />
+          <Contenido sub={sub} set={set} subir={subir} cambiar={onChange} spotify={spotify} />
         </div>
       )}
     </details>
   );
 }
 
-function Contenido({ sub, set, subir }: { sub: Sub; set: (p: Partial<Sub>) => void; subir: (f: File) => Promise<string> }) {
+/** El Kahoot de la app de Kahoot del cumpleañero, guardando las preguntas propias por si se vuelve a ellas. */
+const aKahootReal = (s: Sub): Sub => ({ id: s.id, tipo: "externo", plataforma: "kahoot", titulo: s.titulo, descripcion: "El Kahoot del cumpleañero: entrad con el nombre de vuestro equipo.", respaldo: s });
+
+function Contenido({ sub, set, subir, cambiar, spotify }: { sub: Sub; set: (p: Partial<Sub>) => void; subir: (f: File) => Promise<string>; cambiar: (s: Sub) => void; spotify: ApiSpotify }) {
   switch (sub.tipo) {
+    case "externo":
+      return (
+        <div className="panel col" style={{ background: "var(--bg2)" }}>
+          <b>Se juega con el Kahoot que ha hecho el cumpleañero en la app de Kahoot.</b>
+          <span className="suave">
+            Aquí no hay que escribir nada: el día, cuando él lance su Kahoot, el presentador escribe el PIN en su panel y la TV lo enseña con un QR. Al
+            acabar, el presentador apunta en qué puesto quedó cada equipo.
+          </span>
+          <button
+            type="button"
+            className="btn peq"
+            style={{ alignSelf: "flex-start" }}
+            onClick={() =>
+              confirm("¿Usar preguntas escritas aquí en lugar del Kahoot del cumpleañero?") &&
+              cambiar(sub.respaldo ?? { id: sub.id, tipo: "test", titulo: sub.titulo, puntuacion: "ranking", rapidez: true, segundos: 20, preguntas: [] })
+            }
+          >
+            Mejor escribir las preguntas aquí
+          </button>
+        </div>
+      );
     case "test":
       return (
         <>
+          {sub.id === "kahoot" && (
+            <div className="fila">
+              <button type="button" className="btn peq" onClick={() => cambiar(aKahootReal(sub))}>
+                <Icono n="enlace" /> Usar el Kahoot que ha hecho el cumpleañero (en la app de Kahoot)
+              </button>
+            </div>
+          )}
           <Lista<PreguntaTest>
             nombre="Pregunta"
             items={sub.preguntas}
@@ -203,6 +242,7 @@ function Contenido({ sub, set, subir }: { sub: Sub; set: (p: Partial<Sub>) => vo
     case "cancion":
       return (
         <>
+          <ListaSpotify spotify={spotify} canciones={sub.canciones} onCargar={(canciones) => set({ canciones })} />
           <Lista<Cancion>
             nombre="Canción"
             titulo={(it, i) => `Canción ${i + 1}${it.titulo && !esPlantilla(it.titulo) ? ` · ${it.titulo}` : ""}`}
@@ -216,8 +256,33 @@ function Contenido({ sub, set, subir }: { sub: Sub; set: (p: Partial<Sub>) => vo
                   <Campo etiqueta="Artista" flex={2}><Texto v={it.artista} on={(artista) => s({ ...it, artista })} obligatorio={false} /></Campo>
                   <Campo etiqueta="Empieza a sonar en el segundo"><Numero v={it.inicio} on={(inicio) => s({ ...it, inicio })} /></Campo>
                 </div>
-                {!it.audio && <span className="falta-aviso">Sin MP3: el presentador tendría que ponerla aparte</span>}
-                <Archivo url={it.audio} tipo="audio" subir={subir} on={(audio) => s({ ...it, audio })} inicio={it.inicio} onEmpezarAqui={(inicio) => s({ ...it, inicio })} />
+                {it.spotify && !it.audio ? (
+                  <div className="col" style={{ gap: 6 }}>
+                    <span className="estado-listo" style={{ marginLeft: 0 }}><Icono n="nota" /> Suena por Spotify{it.duracion ? ` · dura ${Math.floor(it.duracion / 60)}:${String(it.duracion % 60).padStart(2, "0")}` : ""}</span>
+                    {it.duracion ? (
+                      <label className="col" style={{ gap: 4 }}>
+                        <span className="campo-ayuda">Mueve la barra hasta la parte que quieras que suene (minuto {Math.floor(it.inicio / 60)}:{String(it.inicio % 60).padStart(2, "0")})</span>
+                        <input type="range" min={0} max={Math.max(0, it.duracion - 5)} value={it.inicio} onChange={(e) => s({ ...it, inicio: Number(e.target.value) })} aria-label="Segundo en el que empieza" />
+                      </label>
+                    ) : null}
+                    <iframe
+                      title={`Escuchar ${it.titulo}`}
+                      src={`https://open.spotify.com/embed/track/${it.spotify.split(":").pop()}`}
+                      width="100%"
+                      height="80"
+                      style={{ border: 0, borderRadius: 8 }}
+                      allow="encrypted-media"
+                      loading="lazy"
+                    />
+                    <span className="campo-ayuda">Escúchala aquí para encontrar el segundo (con la sesión de Spotify abierta en este navegador suena entera).</span>
+                    <button type="button" className="btn peq" style={{ alignSelf: "flex-start" }} onClick={() => s({ ...it, spotify: undefined, duracion: undefined })}>Quitar Spotify y usar MP3</button>
+                  </div>
+                ) : (
+                  <>
+                    {!it.audio && <span className="falta-aviso">Sin audio: sube un MP3 o carga la lista de Spotify arriba</span>}
+                    <Archivo url={it.audio} tipo="audio" subir={subir} on={(audio) => s({ ...it, audio })} inicio={it.inicio} onEmpezarAqui={(inicio) => s({ ...it, inicio })} />
+                  </>
+                )}
               </>
             )}
           />
@@ -273,4 +338,60 @@ function Contenido({ sub, set, subir }: { sub: Sub; set: (p: Partial<Sub>) => vo
         </Avanzados>
       );
   }
+}
+
+/** Cargar las canciones de una ronda desde una lista de Spotify (de la cuenta Premium conectada). */
+function ListaSpotify({ spotify, canciones, onCargar }: { spotify: ApiSpotify; canciones: Cancion[]; onCargar: (c: Cancion[]) => void }) {
+  const [url, setUrl] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const e = spotify.estado;
+  return (
+    <div className="panel col" style={{ background: "#0d2a1d", borderColor: "#1db954" }}>
+      <b><Icono n="nota" /> Canciones desde Spotify (opcional)</b>
+      {!e ? (
+        <span className="suave">Comprobando Spotify…</span>
+      ) : !e.configurado ? (
+        <span className="suave">Spotify no está configurado en el servidor. Mientras tanto, sube los MP3 canción a canción.</span>
+      ) : !e.conectado ? (
+        <>
+          <span className="suave">Conecta una cuenta <b>Premium</b> (una sola vez). Las canciones sonarán en la TV sin descargar nada.</span>
+          <button type="button" className="btn prim" style={{ alignSelf: "flex-start" }} onClick={spotify.conectar}>Conectar con Spotify</button>
+        </>
+      ) : (
+        <>
+          <span className="suave">
+            Conectado como <b>{e.cuenta}</b>
+            {e.premium === false && <b style={{ color: "var(--ko)" }}> · esta cuenta no es Premium: no podrá sonar en la TV</b>}. Pega el enlace de una lista
+            <b> tuya</b> (o colaborativa): en Spotify, «…» → Compartir → Copiar enlace.
+          </span>
+          <form
+            className="fila"
+            onSubmit={async (ev) => {
+              ev.preventDefault();
+              if (!url.trim()) return;
+              if (canciones.some((c) => (c.titulo && !esPlantilla(c.titulo)) || c.audio) && !confirm("Se cambiarán las canciones de esta ronda por las de la lista. ¿Seguir?")) return;
+              setCargando(true);
+              setMsg(null);
+              try {
+                const r = await spotify.lista(url);
+                if (!r.canciones.length) throw new Error("La lista está vacía");
+                onCargar(r.canciones.map((c) => ({ ...c, inicio: Math.min(45, Math.max(0, Math.round(c.duracion / 3))) })));
+                setMsg({ ok: true, t: `Cargadas ${r.canciones.length} canciones de «${r.nombre}». Revisa en qué segundo empieza cada una.` });
+                setUrl("");
+              } catch (x) {
+                setMsg({ ok: false, t: (x as Error).message });
+              } finally {
+                setCargando(false);
+              }
+            }}
+          >
+            <input className="campo" style={{ flex: 1, minWidth: 220 }} placeholder="https://open.spotify.com/playlist/…" value={url} onChange={(ev) => setUrl(ev.target.value)} aria-label="Enlace de la lista de Spotify" />
+            <button className="btn prim" disabled={!url.trim() || cargando}>{cargando ? "Cargando…" : "Cargar canciones"}</button>
+          </form>
+        </>
+      )}
+      {msg && <span style={{ color: msg.ok ? "var(--ok)" : "var(--ko)" }}>{msg.t}</span>}
+    </div>
+  );
 }

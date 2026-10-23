@@ -1,10 +1,11 @@
 // Primera pantalla del admin: qué es esto, qué falta y qué hay que preparar.
 import type { Contenido } from "../../../shared/tipos.ts";
-import { preparacion, revisarSub } from "../../../shared/revision.ts";
+import { preparacion, revisarDisfraces, revisarSub } from "../../../shared/revision.ts";
 import { Icono } from "../../components/iconos.tsx";
 
 export function Portada({ c, onIr }: { c: Contenido; onIr: (subId: string) => void }) {
   const rondas = c.pruebas.flatMap((p, pi) => p.subs.map((s, si) => ({ s, num: p.subs.length > 1 ? `${pi + 1}.${si + 1}` : `${pi + 1}`, prueba: p.titulo })));
+  const faltaDisfraces = revisarDisfraces(c);
   const pendientes = rondas.filter((r) => revisarSub(r.s).length);
   return (
     <>
@@ -37,6 +38,12 @@ export function Portada({ c, onIr }: { c: Contenido; onIr: (subId: string) => vo
               </button>
             );
           })}
+          <button type="button" className={`fila-revision ${faltaDisfraces.length ? "con-falta" : "lista"}`} onClick={() => onIr("disfraces")}>
+            <span className="etiqueta">Final</span>
+            <span className="fila-revision-nombre"><b>Concurso de disfraces</b></span>
+            <span className="fila-revision-estado">{faltaDisfraces.length ? faltaDisfraces.join(" · ") : <><Icono n="check" /> Lista</>}</span>
+            <Icono n="siguiente" />
+          </button>
         </div>
       </div>
 

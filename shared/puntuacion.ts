@@ -167,6 +167,8 @@ export function puntosPropuestos(sub: Sub, crudo: Record<EquipoId, number>, equi
     for (const id of equipos) out[id] = crudo[id] ?? 0;
     return out;
   }
+  // Juego externo (Kahoot): lo apuntado es el puesto, menos es mejor; sin puesto no puntúa
+  if (sub.tipo === "externo") return clasificar(valores, tabla, false);
   // En manual sin medida numérica (p. ej. tiempo), quien no tiene marca no puntúa
   const mayorMejor = sub.tipo === "manual" ? sub.mayorMejor : true;
   if (sub.tipo !== "manual") for (const id of equipos) valores[id] = crudo[id] ?? 0;
@@ -239,4 +241,24 @@ export function leerPrecio(txt: string): number | null {
   }
   const n = Number(t);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}
+
+/** Votos por candidato (los que no tienen votos salen con 0). */
+export function recuentoVotos(votos: Record<string, string>, candidatos: string[]): Record<string, number> {
+  const r: Record<string, number> = Object.fromEntries(candidatos.map((c) => [c, 0]));
+  for (const v of Object.values(votos)) if (v in r) r[v]++;
+  return r;
+}
+
+/**
+ * Puestos 1º–3º de la votación (empatados juntos), ordenados de peor a mejor para revelarlos con suspense.
+ * Solo cuentan los que tienen algún voto.
+ */
+export function podioVotacion(votos: Record<string, string>, candidatos: string[]) {
+  const r = recuentoVotos(votos, candidatos);
+  const distintos = [...new Set(Object.values(r).filter((n) => n > 0))].sort((a, b) => b - a);
+  const grupos = distintos
+    .map((n) => ({ votos: n, nombres: Object.keys(r).filter((k) => r[k] === n), puesto: Object.values(r).filter((x) => x > n).length + 1 }))
+    .filter((g) => g.puesto <= 3);
+  return grupos.reverse();
 }

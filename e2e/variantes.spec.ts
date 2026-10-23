@@ -1,6 +1,6 @@
 // Estados raros vistos de verdad en la TV, los móviles y el panel (con capturas para revisar).
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil, ganchos } from "./util.ts";
+import { cuatroEquipos, foto as fotoBase, nuevaPagina, nuevaTv, opcionesMovil, ganchos } from "./util.ts";
 
 ganchos();
 
@@ -21,10 +21,13 @@ async function movil(browser: Browser, codigo: string, equipo: string, nombre?: 
 test("variantes: nadie responde, 3 opciones, precios raros, hoja, todos fallan, nombres largos, empates", async ({ browser, request }) => {
   // Contenido de prueba: Kahoot de 1 pregunta con 3 opciones y 3 s, precio de 1.000 €, olores en modo hoja
   await request.post("/api/admin/restaurar", { headers: PIN });
+  await cuatroEquipos(request);
   const c = await (await request.get("/api/admin/contenido", { headers: PIN })).json();
   const subs = c.pruebas.flatMap((p: { subs: unknown[] }) => p.subs);
   const sub = (id: string) => subs.find((s: { id: string }) => s.id === id);
-  Object.assign(sub("kahoot"), { segundos: 3, preguntas: [{ texto: "¿Cuántas velas tiene la tarta?", opciones: ["20", "25", "30"], correcta: 1 }] });
+  const pk = c.pruebas.find((p: { subs: { id: string }[] }) => p.subs.some((s) => s.id === "kahoot"));
+  pk.subs[0] = pk.subs[0].respaldo; // preguntas aquí en lugar del Kahoot real
+  Object.assign(pk.subs[0], { segundos: 3, preguntas: [{ texto: "¿Cuántas velas tiene la tarta?", opciones: ["20", "25", "30"], correcta: 1 }] });
   sub("precio").productos = [{ nombre: "Cachimba de lujo", precio: 1000 }];
   Object.assign(sub("olores"), { modo: "hoja", items: [{ etiqueta: "Mezcla 1", respuesta: "Sandía + Menta" }, { etiqueta: "Mezcla 2", respuesta: "Love 66" }] });
   expect((await request.put("/api/admin/contenido", { headers: PIN, data: c })).status()).toBe(200);

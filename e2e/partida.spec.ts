@@ -273,6 +273,8 @@ test("admin: guía, lo que falta, guardado automático, «Empezar aquí» y conf
 
   // Kahoot: aceptar una pregunta de ejemplo con un clic
   await page.locator(".fila-revision").filter({ hasText: "¿Cuánto le conocéis?" }).click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#ronda-kahoot").getByRole("button", { name: "Mejor escribir las preguntas aquí" }).click();
   await page.locator("#ronda-kahoot").getByRole("button", { name: /Usar «¿En qué año nació el cumpleañero\?»/ }).click();
   await expect(page.locator("#ronda-kahoot textarea").first()).toHaveValue("¿En qué año nació el cumpleañero?");
   await foto(page, "admin-kahoot");

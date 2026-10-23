@@ -1,15 +1,24 @@
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Publico } from "../../shared/tipos.ts";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { miembros, type Publico } from "../../shared/tipos.ts";
 import confetti from "canvas-confetti";
 import { conColor, Crono, Cuenta, desbloquearAudio, equipoDe, etiquetaCrudo, euros, FORMAS, gruposPodio, ponerVolumen, posRosco, probarSonido, fmt, sonidos, useSonidosCuenta, useWakeLock } from "../components/comun.tsx";
 import { Icono, Insignia } from "../components/iconos.tsx";
-import { useCanal } from "../socket.ts";
-
-const AUTH = { rol: "tv" };
+import { guardado, useCanal } from "../socket.ts";
+import { ReproductorSpotify, type EstadoSpotify } from "../components/spotifyTv.ts";
 
 export function Tv() {
-  const { datos: p, desfase, conectado, enviar } = useCanal<Publico>(AUTH, "publico", { recargar: () => location.reload() });
+  // Clave que da el panel al autorizar esta TV para Spotify (se guarda: sobrevive a recargas)
+  const [claveSpotify, setClaveSpotify] = useState(guardado.leer("tv-spotify") ?? "");
+  const auth = useMemo(() => ({ rol: "tv", claveSpotify }), [claveSpotify]);
+  const { datos: p, desfase, conectado, enviar, preguntar } = useCanal<Publico>(auth, "publico", {
+    recargar: () => location.reload(),
+    spotifyClave: (k: string) => {
+      guardado.poner("tv-spotify", k);
+      setClaveSpotify(k);
+    },
+  });
+  const reproductor = useSpotifyTv(!!claveSpotify, preguntar, (e) => enviar("spotifyEstado", e), conectado);
   // La TV no se toca: el sonido funciona si el navegador lo permite (lanzador «Concurso TV») y lo controla el presentador
   const [sonidoOk, setSonidoOk] = useState(false);
   const [progreso, setProgreso] = useState<Progreso>(null);
@@ -79,6 +88,7 @@ export function Tv() {
         </div>
       )}
       <AudioTv p={p} activa={sonidoOk} onProgreso={setProgreso} />
+      <AudioSpotify p={p} reproductor={reproductor} onProgreso={setProgreso} />
       <Precarga urls={p.audiosSub} />
     </div>
   );
@@ -166,10 +176,11 @@ function Precarga({ urls }: { urls?: string[] }) {
 
 function Centro({ p, desfase, progreso, suena }: { p: Publico; desfase: number; progreso: Progreso; suena: boolean }) {
   if (p.vista === "podio") return <Podio p={p} suena={suena} />;
+  if (p.vista === "votacion") return <VotacionTv p={p} suena={suena} />;
   if (p.vista === "marcador") return <Desglose p={p} />;
   if (!p.sub) return <Lobby p={p} />;
   const s = p.sub;
-  if (p.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual")
+  if (p.fase === "intro" && s.tipo !== "tarjetas" && s.tipo !== "manual" && s.tipo !== "externo")
     return (
       <>
         <div className="marquesina" style={{ padding: "2.4vh 4vw" }}>
@@ -195,6 +206,8 @@ function Centro({ p, desfase, progreso, suena }: { p: Publico; desfase: number; 
       return <TarjetasTv p={p} desfase={desfase} />;
     case "manual":
       return <ManualTv p={p} desfase={desfase} />;
+    case "externo":
+      return <ExternoTv p={p} />;
   }
 }
 
@@ -210,10 +223,13 @@ function Lobby({ p }: { p: Publico }) {
         <div className="col" style={{ textAlign: "left", gap: "2vh" }}>
           <div className="tv-sub">Escanead el QR con un móvil por equipo</div>
           {p.equipos.map((e) => (
-            <div key={e.id} className="fila" style={{ fontSize: "3.6vh", fontWeight: 800 }}>
-              <span className="punto" style={{ background: e.color, width: "3vh", height: "3vh" }} />
-              {e.nombre}
-              <span className="suave" style={{ fontSize: "2.4vh" }}>{e.conectados ? <><Icono n="telefono" /> {e.conectados} móvil{e.conectados > 1 ? "es" : ""}</> : "esperando…"}</span>
+            <div key={e.id} className="col" style={{ gap: "0.3vh" }}>
+              <div className="fila" style={{ fontSize: p.equipos.length > 4 ? "3.2vh" : "3.6vh", fontWeight: 800 }}>
+                <span className="punto" style={{ background: e.color, width: "3vh", height: "3vh" }} />
+                {e.nombre}
+                <span className="suave" style={{ fontSize: "2.4vh" }}>{e.conectados ? <><Icono n="telefono" /> {e.conectados} móvil{e.conectados > 1 ? "es" : ""}</> : "esperando…"}</span>
+              </div>
+              {miembros(e).length > 0 && <div className="suave" style={{ fontSize: "2.2vh", paddingLeft: "4vh" }}>{miembros(e).join(" · ")}</div>}
             </div>
           ))}
         </div>
@@ -498,6 +514,12 @@ function TarjetasTv({ p, desfase }: { p: Publico; desfase: number }) {
                 <div className="proh">{p.tarjeta.prohibidas.filter(Boolean).map((x) => <span key={x}>{x}</span>)}</div>
               )}
             </div>
+          ) : p.fase === "intro" ? (
+            <div className="tv-sub">
+              {s.tarjetaEnTv
+                ? `Quien ${s.modo === "dibujo" ? "dibuja" : "explica"}, frente a la TV; su equipo, de espaldas. La palabra sale al empezar el turno`
+                : `Quien ${s.modo === "dibujo" ? "dibuja" : "explica"} ve la palabra en el móvil del presentador`}
+            </div>
           ) : (
             p.condicion && <div className="tarjeta-cond">{p.condicion}</div>
           )}
@@ -702,4 +724,197 @@ function Podio({ p, suena }: { p: Publico; suena: boolean }) {
       </div>
     </>
   );
+}
+
+/** Kahoot del cumpleañero: cómo unirse (PIN en grande y QR directo). */
+function ExternoTv({ p }: { p: Publico }) {
+  const s = p.sub!;
+  const pin = p.externo?.pin;
+  const url = pin ? `https://kahoot.it/?pin=${pin}&refer_method=link` : "https://kahoot.it";
+  return (
+    <>
+      <div className="tv-sub etiqueta">Prueba {s.pruebaNum} · {s.pruebaTitulo}</div>
+      <div className="tv-titulo" style={{ fontSize: "7vh" }}>{s.titulo}</div>
+      {pin ? (
+        <div className="fila" style={{ gap: "4vw", justifyContent: "center", alignItems: "center" }}>
+          <div className="col" style={{ alignItems: "center", gap: "1.5vh" }}>
+            <div className="tv-sub">Entrad en <b style={{ color: "var(--texto)" }}>kahoot.it</b> con el PIN</div>
+            <div className="marquesina" style={{ padding: "2vh 3vw" }}>
+              <div className="tv-numero" style={{ fontSize: "16vh", letterSpacing: "0.08em" }}>{pin}</div>
+            </div>
+            <div className="tv-sub">y poned de nombre <b style={{ color: "var(--bombilla)" }}>el de vuestro equipo</b></div>
+          </div>
+          <div className="col" style={{ alignItems: "center", gap: "1vh" }}>
+            <div style={{ background: "#fff", padding: "1.6vh", borderRadius: 6, border: "4px solid #050b1c", boxShadow: "8px 8px 0 #050b1c" }}>
+              <QRCodeSVG value={url} size={Math.round(window.innerHeight * 0.3)} />
+            </div>
+            <div className="tv-sub" style={{ fontSize: "2.4vh" }}>o escanead para entrar directo</div>
+          </div>
+        </div>
+      ) : (
+        <div className="tv-sub">Esperando a que el cumpleañero lance su Kahoot…</div>
+      )}
+    </>
+  );
+}
+
+/** Votación del mejor disfraz: QR para votar, recuento y revelación con suspense. */
+function VotacionTv({ p, suena }: { p: Publico; suena: boolean }) {
+  const v = p.votacion;
+  const final = !!v && v.estado === "cerrada" && v.totalPasos > 0 && v.paso >= v.totalPasos;
+  const paso = v?.paso ?? 0;
+  useEffect(() => {
+    if (!paso) return;
+    if (final) {
+      if (suena) sonidos.fanfarria();
+      const fin = Date.now() + 3500;
+      const rafaga = () => {
+        void confetti({ particleCount: 70, spread: 80, startVelocity: 55, origin: { x: Math.random() * 0.6 + 0.2, y: 0.7 } });
+        if (Date.now() < fin) setTimeout(rafaga, 350);
+      };
+      rafaga();
+    } else if (suena) sonidos.redoble();
+  }, [paso]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!v || !v.participantes.length) return <div className="tv-titulo">Concurso de disfraces</div>;
+  const url = `${location.origin}/votar?c=${p.codigo}`;
+  const ganador = final ? v.revelados.at(-1) : null;
+  if (v.estado === "cerrada")
+    return (
+      <>
+        <div className="tv-sub etiqueta">Concurso de disfraces</div>
+        <div className={`tv-titulo ${ganador ? "" : ""}`}>
+          {ganador ? `🏆 ¡${ganador.nombres.join(" y ")}!` : v.paso ? "Y el siguiente es…" : "¿Quién tiene el mejor disfraz?"}
+        </div>
+        {ganador && ganador.nombres.length > 1 && <div className="tv-sub">¡Empate a {ganador.votos} votos!</div>}
+        <div className="fila" style={{ gap: "2vw", justifyContent: "center", alignItems: "flex-end" }}>
+          {v.revelados.map((g) => (
+            <div key={g.puesto} className={`tarjeta-preg col disfraz-puesto puesto-${g.puesto}`} style={{ alignItems: "center", animation: "pop 0.5s" }}>
+              <div className="tv-numero" style={{ fontSize: g.puesto === 1 ? "14vh" : "9vh" }}>{g.puesto}<small style={{ fontFamily: "var(--cond)", fontSize: "0.4em", verticalAlign: "0.9em" }}>º</small></div>
+              <div className="tv-pregunta" style={{ fontSize: g.puesto === 1 ? "6vh" : "4vh" }}>{g.nombres.join(" y ")}</div>
+              <div className="tv-sub">{g.votos} {g.votos === 1 ? "voto" : "votos"}</div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  return (
+    <>
+      <div className="tv-sub etiqueta">{v.ronda > 1 ? `Desempate entre ${v.candidatos.join(" y ")}` : "Concurso de disfraces"}</div>
+      <div className="tv-titulo">¡Votad el mejor disfraz!</div>
+      <div className="fila" style={{ gap: "4vw", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ background: "#fff", padding: "1.6vh", borderRadius: 6, border: "4px solid #050b1c", boxShadow: "8px 8px 0 #050b1c" }}>
+          <QRCodeSVG value={url} size={Math.round(window.innerHeight * 0.32)} />
+        </div>
+        <div className="col" style={{ gap: "2vh", alignItems: "flex-start", maxWidth: "45vw" }}>
+          <div className="tv-sub">Cada uno con su móvil: escanead, elegid vuestro nombre y votad (no vale votarse).</div>
+          {v.estado === "abierta" ? (
+            <div className="marquesina" style={{ padding: "1.5vh 2vw" }}>
+              <div className="tv-numero" style={{ fontSize: "10vh" }}>{v.votaron.length}<span style={{ fontSize: "0.45em", color: "var(--texto)" }}> / {v.participantes.length}</span></div>
+            </div>
+          ) : (
+            <div className="tv-sub">La votación empieza en un momento…</div>
+          )}
+          {v.estado === "abierta" && <div className="tv-sub" style={{ fontSize: "2.4vh" }}>han votado</div>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Arranca el reproductor de Spotify en la TV cuando el panel la ha autorizado; informa al panel de cómo va. */
+function useSpotifyTv(
+  autorizada: boolean,
+  preguntar: <R>(ev: string, payload: unknown) => Promise<R>,
+  informar: (e: EstadoSpotify) => void,
+  conectado: boolean,
+) {
+  const [rep, setRep] = useState<ReproductorSpotify | null>(null);
+  const [listo, setListo] = useState(false);
+  const ultimo = useRef<EstadoSpotify>({ listo: false, error: null });
+  const inf = useRef(informar);
+  inf.current = informar;
+  const preg = useRef(preguntar);
+  preg.current = preguntar;
+  useEffect(() => {
+    if (!autorizada) return;
+    const r = new ReproductorSpotify(
+      async () => {
+        const d = await preg.current<{ token?: string; error?: string }>("spotifyToken", null);
+        if (!d.token) throw new Error(d.error ?? "Sin token de Spotify");
+        return d.token;
+      },
+      (e) => {
+        ultimo.current = e;
+        setListo(e.listo);
+        inf.current(e);
+      },
+    );
+    void r.iniciar();
+    setRep(r);
+    return () => r.cerrar();
+  }, [autorizada]);
+  // Al reconectar con el servidor, volver a contarle cómo está Spotify
+  useEffect(() => {
+    if (conectado && autorizada) inf.current(ultimo.current);
+  }, [conectado, autorizada]);
+  return listo ? rep : null; // solo se usa cuando ya puede sonar
+}
+
+/**
+ * Canciones de Spotify: igual que el MP3 (fragmento que se para solo, «Repetir», libre al revelar), pero
+ * sonando en el reproductor de Spotify de la TV.
+ */
+function AudioSpotify({ p, reproductor, onProgreso }: { p: Publico; reproductor: ReproductorSpotify | null; onProgreso: (x: Progreso) => void }) {
+  const au = p.audio?.spotify ? p.audio : null;
+  const clave = au ? `${p.sub?.id}:${p.indice}:${au.spotify}` : null;
+  const cargada = useRef<string | null>(null);
+  const libre = useRef(false);
+  libre.current = p.fase === "revelar";
+  const fin = au && au.fragmento > 0 ? (au.inicio + au.fragmento) * 1000 : null;
+
+  // Sonar / parar según el panel
+  useEffect(() => {
+    if (!reproductor) return;
+    if (!au || !clave) {
+      if (cargada.current) void reproductor.pausar();
+      cargada.current = null;
+      return;
+    }
+    if (p.sonando) {
+      if (cargada.current !== clave) {
+        cargada.current = clave;
+        onProgreso({ frac: 0, acabado: false });
+        reproductor.tocar(au.spotify!, au.inicio * 1000).catch(() => (cargada.current = null));
+      } else void reproductor.seguir();
+    } else void reproductor.pausar();
+  }, [clave, p.sonando, reproductor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Repetir el fragmento
+  useEffect(() => {
+    if (reproductor && au && p.repetir && cargada.current === clave) {
+      void reproductor.ir(au.inicio * 1000);
+      void reproductor.seguir();
+    }
+  }, [p.repetir]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Volumen
+  useEffect(() => {
+    void reproductor?.volumen(p.tv.mudo ? 0 : p.tv.volumen / 100);
+  }, [reproductor, p.tv.mudo, p.tv.volumen]);
+
+  // Progreso y corte del fragmento
+  useEffect(() => {
+    if (!reproductor || !au || !clave) return;
+    const id = setInterval(async () => {
+      const e = await reproductor.posicion();
+      if (!e || cargada.current !== clave) return;
+      if (fin === null) return onProgreso({ frac: 0, acabado: false });
+      const acabado = e.position >= fin;
+      if (acabado && !libre.current && !e.paused) void reproductor.pausar();
+      onProgreso({ frac: Math.min(1, Math.max(0, (e.position - au.inicio * 1000) / (au.fragmento * 1000))), acabado });
+    }, 250);
+    return () => clearInterval(id);
+  }, [clave, reproductor]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }

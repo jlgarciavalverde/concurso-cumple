@@ -67,7 +67,14 @@ export function useCanal<T extends { ahora: number }>(auth: Record<string, strin
     cola.current.push(m);
     mandar(m);
   };
-  return { datos, error, conectado, desfase, enviar, enviarSeguro };
+  /** Envía y espera la respuesta del servidor (o un error si no contesta). */
+  const preguntar = <R,>(ev: string, payload: unknown) =>
+    new Promise<R>((ok, mal) => {
+      const s = ref.current;
+      if (!s?.connected) return mal(new Error("Sin conexión: espera un momento y vuelve a intentarlo"));
+      s.timeout(5000).emit(ev, payload, (err: unknown, r: R) => (err ? mal(new Error("El servidor no responde: vuelve a intentarlo")) : ok(r)));
+    });
+  return { datos, error, conectado, desfase, enviar, enviarSeguro, preguntar };
 }
 
 /** Re-renderiza cada `ms` mientras `activo`. */

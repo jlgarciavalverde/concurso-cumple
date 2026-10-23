@@ -58,6 +58,7 @@ test("cortes de red y reinicio del servidor sin perder nada", async ({ browser }
   // Cultura general con 5 s por pregunta para poder dejar pasar el tiempo
   const c = await (await fetch(`${URL}/api/admin/contenido`, { headers: PIN })).json();
   c.pruebas.flatMap((p: { subs: { id: string; segundos?: number }[] }) => p.subs).find((s: { id: string }) => s.id === "cultura").segundos = 5;
+  c.equipos = c.equipos.slice(0, 4); // el test se escribió con 4 equipos
   await fetch(`${URL}/api/admin/contenido`, { method: "PUT", headers: { ...PIN, "content-type": "application/json" }, body: JSON.stringify(c) });
 
   const tv = await nuevaTv(browser);

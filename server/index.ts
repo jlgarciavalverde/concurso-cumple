@@ -8,7 +8,8 @@ import fastifyStatic from "@fastify/static";
 import multipart from "@fastify/multipart";
 import { Server } from "socket.io";
 import type { Contenido, Estado, EquipoId } from "../shared/tipos.ts";
-import { contenidoInicial } from "./contenido-inicial.ts";
+import { contenidoInicial, kahootExterno } from "./contenido-inicial.ts";
+import { Spotify } from "./spotify.ts";
 import { estadoVacio, Juego, normalizarEstado, type AccionEquipo, type AccionHost } from "./juego.ts";
 import { validarContenido } from "./validar.ts";
 
@@ -48,6 +49,24 @@ function migrar(c: Contenido): boolean {
         Object.assign(s, { medida: "vasos", mayorMejor: true, cronometro: false, segundos: 60, descripcion: "¡A apilar vasos! Gana quien más vasos consiga poner." });
         cambio = true;
       }
+  // Cambios de versión que se aplican una sola vez (si luego se deshacen a mano, no vuelven)
+  const una = (nombre: string, fn: () => void) => {
+    if (c.migraciones?.includes(nombre)) return;
+    fn();
+    c.migraciones = [...(c.migraciones ?? []), nombre];
+    cambio = true;
+  };
+  // v0.11.0: cinco equipos (si siguen los cuatro de serie, se añade el morado sin tocar nombres ni puntos)
+  una("5-equipos", () => {
+    if (c.equipos.map((e) => e.id).join() === "rojo,azul,verde,amarillo")
+      c.equipos.push({ id: "morado", nombre: c.equipos.some((e) => e.nombre.toLocaleLowerCase("es") === "morado") ? "Equipo 5" : "Morado", color: "#a855f7" });
+  });
+  // v0.11.0: el Kahoot lo hace el cumpleañero en Kahoot. Si nadie ha escrito preguntas propias, se pasa a ronda
+  // externa (las preguntas quedan guardadas por si se vuelve a «Preguntas aquí»).
+  una("kahoot-externo", () => {
+    for (const p of c.pruebas)
+      p.subs = p.subs.map((s) => (s.id === "kahoot" && s.tipo === "test" && s.preguntas.every((q) => q.texto.includes("✏️")) ? kahootExterno(s) : s));
+  });
   return cambio;
 }
 
@@ -82,6 +101,7 @@ app.put("/api/admin/contenido", async (req, reply) => {
   if ((nuevo.rev ?? 0) !== actual)
     return reply.code(409).send({ error: "El contenido ha cambiado desde que abriste esta página (p. ej. el presentador cambió algo en directo). Recarga y vuelve a hacer tus cambios." });
   nuevo.rev = actual + 1;
+  nuevo.migraciones = juego.contenido.migraciones; // las lleva el servidor, no el panel
   juego.contenido = nuevo;
   juego.ajustarAlContenido();
   escribir(fContenido, juego.contenido);
@@ -90,6 +110,37 @@ app.put("/api/admin/contenido", async (req, reply) => {
   return { ok: true, rev: nuevo.rev };
 });
 // Partida nueva (mismos equipos y contenido, mismo código): útil tras un ensayo
+// ---------- Spotify (la cuenta Premium que hace sonar las canciones en la TV) ----------
+const spotify = new Spotify(resolve(DATA, "spotify.json"));
+app.get("/api/admin/spotify/estado", async () => spotify.estado());
+app.post("/api/admin/spotify/conectar", async (_req, reply) => {
+  if (!spotify.configurado) return reply.code(400).send({ error: "Falta configurar la app de Spotify en el servidor (SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET)" });
+  return { url: spotify.urlConectar() };
+});
+app.post("/api/admin/spotify/desconectar", async () => {
+  spotify.desconectar();
+  emitirHost();
+  return { ok: true };
+});
+app.post("/api/admin/spotify/lista", async (req, reply) => {
+  try {
+    return await spotify.lista(String((req.body as { url?: string })?.url ?? ""));
+  } catch (e) {
+    return reply.code(400).send({ error: (e as Error).message });
+  }
+});
+app.get("/api/spotify/callback", async (req, reply) => {
+  const q = req.query as { code?: string; state?: string; error?: string };
+  try {
+    if (q.error) throw new Error(q.error === "access_denied" ? "Has cancelado la conexión" : q.error);
+    await spotify.alVolver(String(q.code ?? ""), String(q.state ?? ""));
+    emitirHost();
+    return reply.redirect("/admin?spotify=ok");
+  } catch (e) {
+    return reply.redirect(`/admin?spotify=error&msg=${encodeURIComponent((e as Error).message)}`);
+  }
+});
+
 app.post("/api/admin/reiniciar", async () => {
   juego.host({ t: "reiniciar" });
   guardar();
@@ -154,6 +205,7 @@ function conectados(): Record<EquipoId, number> {
 }
 
 const sonidoTv = new Map<string, boolean>();
+const estadoSpotifyTv = new Map<string, { autorizada: boolean; listo: boolean; error: string | null }>();
 
 let temporizador: NodeJS.Timeout | null = null;
 function programarTic() {
@@ -207,6 +259,7 @@ function vistaHost(con: Record<EquipoId, number>, pub: ReturnType<Juego["publico
     tvSonido: sonidoTv.size ? [...sonidoTv.values()].some(Boolean) : null,
     latencias: latenciasEquipos(),
     deshacer: juego.puedeDeshacer,
+    spotify: { ...spotify.estado(), tvs: [...estadoSpotifyTv.values()] },
   };
 }
 
@@ -224,11 +277,12 @@ function emitir() {
   io.to("host").emit("host", vistaHost(con, pub));
   // Equipos sin elegir (pantalla de entrada): solo la lista de equipos
   io.to("lobby").emit("equipo", pub);
+  io.to("votantes").emit("votacion", { ahora: pub.ahora, titulo: pub.titulo, votacion: juego.publicoVotacion() });
   programarTic();
 }
 
 io.on("connection", (socket) => {
-  const auth = socket.handshake.auth as { rol?: string; pin?: string; codigo?: string; equipo?: string };
+  const auth = socket.handshake.auth as { rol?: string; pin?: string; codigo?: string; equipo?: string; claveSpotify?: string };
   if (auth.rol === "host") {
     if (!pinOk(auth.pin)) {
       setTimeout(() => {
@@ -239,6 +293,15 @@ io.on("connection", (socket) => {
     }
     socket.join("host");
     socket.on("tvRecargar", () => io.to("tv").emit("recargar"));
+    // Autorizar las TVs conectadas ahora mismo a usar Spotify (se les da una clave que guardan para siempre)
+    socket.on("spotifyConfiarTv", () => {
+      for (const id of io.sockets.adapter.rooms.get("tv") ?? []) {
+        const tv = io.sockets.sockets.get(id);
+        if (!tv) continue;
+        tv.data.spotify = true;
+        tv.emit("spotifyClave", spotify.nuevaClaveTv());
+      }
+    });
     socket.on("host", (acc: AccionHost) => {
       try {
         juego.host(acc);
@@ -253,6 +316,22 @@ io.on("connection", (socket) => {
         app.log.error(e);
       }
     });
+  } else if (auth.rol === "votante") {
+    // Votación del mejor disfraz: con el código de la partida (va en el QR de la TV), sin PIN
+    if (String(auth.codigo ?? "").toUpperCase() !== juego.estado.codigo) {
+      socket.emit("error", "Código incorrecto");
+      socket.disconnect(true);
+      return;
+    }
+    socket.join("votantes");
+    socket.on("votar", (d: { votante?: string; votado?: string }, ack?: (r: { ok: boolean; error?: string }) => void) => {
+      const error = juego.votar(d?.votante, d?.votado);
+      if (typeof ack === "function") ack(error ? { ok: false, error } : { ok: true });
+      if (!error) {
+        guardar();
+        emitir();
+      }
+    });
   } else if (auth.rol === "tv") {
     socket.join("tv");
     // La TV no se toca: cuenta si el navegador le deja sonar para que el presentador lo vea
@@ -260,7 +339,27 @@ io.on("connection", (socket) => {
       sonidoTv.set(socket.id, !!d?.sonido);
       emitir();
     });
-    socket.on("disconnect", () => sonidoTv.delete(socket.id));
+    socket.on("disconnect", () => {
+      sonidoTv.delete(socket.id);
+      estadoSpotifyTv.delete(socket.id);
+      emitirHost();
+    });
+    // Spotify: solo una TV autorizada desde el panel recibe el token (si no, cualquiera que abra /tv lo tendría)
+    socket.data.spotify = spotify.claveTvValida(auth.claveSpotify);
+    socket.on("spotifyToken", async (_: unknown, ack?: (r: { token?: string; error?: string }) => void) => {
+      if (typeof ack !== "function") return;
+      if (!socket.data.spotify) return ack({ error: "Esta TV no está autorizada para Spotify (autorízala desde el panel)" });
+      try {
+        ack({ token: await spotify.token() });
+      } catch (e) {
+        ack({ error: (e as Error).message });
+      }
+    });
+    socket.on("spotifyEstado", (d: { listo?: boolean; error?: string | null }) => {
+      estadoSpotifyTv.set(socket.id, { autorizada: !!socket.data.spotify, listo: !!d?.listo, error: d?.error ?? null });
+      emitirHost();
+    });
+    estadoSpotifyTv.set(socket.id, { autorizada: !!socket.data.spotify, listo: false, error: null });
   } else if (auth.rol === "equipo") {
     const codigo = String(auth.codigo ?? "").toUpperCase();
     const eq = String(auth.equipo ?? "");
