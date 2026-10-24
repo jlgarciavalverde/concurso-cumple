@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icono } from "../components/iconos.tsx";
 import { BONUS_RAPIDEZ } from "../../shared/puntuacion.ts";
 import { revisarSub } from "../../shared/revision.ts";
-import { fragmento, porItem, segundosItem, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
+import { enlaceKahoot, fragmento, porItem, segundosItem, sonidoCancion, tarjetaEnTv, type Sub, type VistaHost } from "../../shared/tipos.ts";
 import type { AccionHost } from "../../server/juego.ts";
 import { Crono, Cuenta, equipoDe, etiquetaCrudo, FORMAS, fmt, gruposPodio } from "../components/comun.tsx";
 import { guardado, useCanal } from "../socket.ts";
@@ -211,7 +211,7 @@ function textoFase(h: VistaHost, sub: Sub): string {
     case "manual":
       return "En juego";
     case "externo":
-      return h.publico.externo?.pin ? `PIN ${h.publico.externo.pin} en la TV` : "Esperando el PIN";
+      return h.publico.externo?.pin ? `PIN ${h.publico.externo.pin} en la TV` : h.publico.externo?.enlace ? "QR del enlace en la TV" : "Esperando el PIN";
     case "adivinar":
       if (!porItem(sub)) return `Entregadas ${Object.values(v.hojas).filter((x) => x.entregada).length}/${n}`;
       return `Esperando respuestas (${h.publico.contestados.length}/${n})`;
@@ -471,15 +471,59 @@ function ControlAdivinar({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo
 function ControlCancion({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo: "cancion" }>; a: A }) {
   const v = h.estado.vivo;
   const c = sub.canciones[v.indice];
-  const frag = <Segundos valor={fragmento(sub)} etiqueta="Fragmento (0 = entera)" campo="fragmento" a={a} jugando={v.fase === "jugando"} />;
+  const yo = sonidoCancion(sub) === "presentador";
+  const modo = (
+    <label className="fila" style={{ gap: 8 }}>
+      <input type="checkbox" checked={yo} onChange={(e) => a({ t: "config", campo: "sonidoPresentador", valor: e.target.checked })} />
+      La música la pongo yo desde mi móvil (la app solo pone el pulsador)
+    </label>
+  );
+  const frag = yo ? null : <Segundos valor={fragmento(sub)} etiqueta="Fragmento (0 = entera)" campo="fragmento" a={a} jugando={v.fase === "jugando"} />;
   if (v.fase === "intro")
     return (
       <>
+        {modo}
         {frag}
+        {yo && <span className="suave">Ten Spotify abierto en tu móvil y conectado al altavoz. En cada canción te digo cuál poner, con un botón para buscarla.</span>}
         <Abrir a={a} texto={`Primera canción (${sub.canciones.length})`} />
       </>
     );
   const pulsado = equipoDe(h.publico, v.pulsado);
+  if (yo)
+    return (
+      <>
+        {modo}
+        <div className="panel col" style={{ background: "var(--bg2)" }}>
+          <span className="suave">Canción {v.indice + 1} de {sub.canciones.length}: pon esta en tu móvil</span>
+          <span className="secreto" style={{ fontSize: "1.5em" }}>{c?.titulo}</span>
+          <span className="suave">{c?.artista}</span>
+          <a
+            className="btn"
+            style={{ alignSelf: "flex-start", textDecoration: "none", background: "#1db954", color: "#04210f" }}
+            href={c?.spotify ? `https://open.spotify.com/track/${c.spotify.split(":").pop()}` : `https://open.spotify.com/search/${encodeURIComponent(`${c?.titulo ?? ""} ${c?.artista ?? ""}`.trim())}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Icono n="nota" /> {c?.spotify ? "Abrir en Spotify" : "Buscar en Spotify"}
+          </a>
+          {v.bloqueados.length > 0 && <span className="suave">Fallaron: {v.bloqueados.map((id) => equipoDe(h.publico, id)?.nombre).join(", ")}</span>}
+        </div>
+        {v.fase === "jugando" && pulsado && (
+          <div className="panel col" style={{ borderColor: pulsado.color }}>
+            <b style={{ fontSize: "1.6em", color: pulsado.color }}><Icono n="pausa" /> ¡Pausa la música! Ha pulsado {pulsado.nombre}</b>
+            <div className="fila">
+              <button className="btn ok grande" onClick={() => a({ t: "acierto" })}><Icono n="check" /> Acierto</button>
+              <button className="btn ko grande" onClick={() => a({ t: "fallo" })}><Icono n="cruz" /> Fallo (sigue la música)</button>
+            </div>
+          </div>
+        )}
+        <div className="fila">
+          {v.fase === "jugando" && !pulsado && <button className="btn oro" onClick={() => a({ t: "revelar" })}><Icono n="revelar" /> Nadie la sabe: revelar</button>}
+          <button className="btn prim grande" data-principal={v.fase === "revelar" ? "" : undefined} onClick={() => a({ t: "siguiente" })}>{v.indice + 1 < sub.canciones.length ? "Siguiente canción" : "Resultados"}</button>
+        </div>
+        <Crudos h={h} sub={sub} a={a} />
+      </>
+    );
   return (
     <>
       {frag}
@@ -733,7 +777,7 @@ function ControlTv({ h, a, recargar }: { h: VistaHost; a: A; recargar: () => voi
 
 /** Spotify: ¿está conectada la cuenta y la TV lista para sonar? Solo sale si alguna canción usa Spotify. */
 function EstadoSpotify({ h, autorizar }: { h: VistaHost; autorizar: () => void }) {
-  const usa = h.contenido.pruebas.some((p) => p.subs.some((s) => s.tipo === "cancion" && s.canciones.some((c) => c.spotify && !c.audio)));
+  const usa = h.contenido.pruebas.some((p) => p.subs.some((s) => s.tipo === "cancion" && sonidoCancion(s) === "tv" && s.canciones.some((c) => c.spotify && !c.audio)));
   const sp = h.spotify;
   if (!usa || !sp) return null;
   const tv = sp.tvs.find((t) => t.listo) ?? sp.tvs.find((t) => t.autorizada) ?? sp.tvs[0];
@@ -778,8 +822,19 @@ function ControlExterno({ h, sub, a }: { h: VistaHost; sub: Extract<Sub, { tipo:
   const pin = h.publico.externo?.pin ?? "";
   const [txt, setTxt] = useState(pin);
   useEffect(() => setTxt(pin), [pin]);
+  const k = enlaceKahoot(sub.enlace);
   return (
     <>
+      {k.anfitrion && (
+        <div className="panel col" style={{ background: "var(--bg2)" }}>
+          <b>El Kahoot del cumpleañero:</b>
+          <a className="btn" href={k.anfitrion} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start", textDecoration: "none" }}>
+            <Icono n="enlace" /> Abrir el Kahoot (para lanzarlo)
+          </a>
+          <span className="suave">Lánzalo desde su cuenta («Start» → «Classic»): saldrá un PIN; escríbelo aquí abajo.</span>
+        </div>
+      )}
+      {k.jugadores && !pin && <div className="suave">La TV ya enseña el QR del enlace que se puso en /admin. Si al lanzar sale un PIN, escríbelo abajo (manda el PIN).</div>}
       <div className="panel col" style={{ background: "var(--bg2)" }}>
         <b>1. Cuando el cumpleañero lance su Kahoot, escribe aquí el PIN que le sale:</b>
         <form

@@ -161,3 +161,49 @@ test("cinco equipos con sus integrantes: admin, TV y móvil", async ({ browser, 
   await foto(movil, "movil-cinco-equipos");
   await expect(tv.locator(".tv-pie .tv-eq")).toHaveCount(5);
 });
+
+test("enlace del Kahoot desde /admin y canciones con la música en el móvil del presentador", async ({ browser, request }) => {
+  const admin = await nuevaPagina(browser, "admin", { viewport: { width: 1280, height: 900 } });
+  await admin.goto("/admin");
+  await admin.getByPlaceholder("PIN").fill("1234");
+  await admin.getByRole("button", { name: "Entrar" }).click();
+  await admin.locator(".fila-revision").filter({ hasText: "¿Cuánto le conocéis?" }).click();
+  const k = admin.locator("#ronda-kahoot");
+  await k.getByPlaceholder(/create\.kahoot\.it/).fill("https://kahoot.it/challenge/0123456?challenge-id=prueba");
+  await expect(k.getByText(/Enlace para jugadores/)).toBeVisible();
+  await expect(admin.getByText(/Guardado ahora/)).toBeVisible({ timeout: 8000 });
+  // Las canciones sin audio salen listas: las pone el presentador
+  await admin.locator(".fila-revision").filter({ hasText: "Rap español" }).click();
+  await expect(admin.locator("#ronda-c-rap").getByRole("radio", { name: /El presentador, desde su móvil/ })).toBeChecked();
+  await expect(admin.locator(".fila-revision").filter({ hasText: "Rap español" })).toContainText("Lista");
+  await foto(admin, "admin-kahoot-enlace");
+
+  const tv = await nuevaTv(browser);
+  await tv.goto("/tv");
+  const codigo = (await tv.locator(".unete b").innerText()).trim();
+  const host = await nuevaPagina(browser, "panel", opcionesMovil());
+  await host.goto("/presentador");
+  await host.getByPlaceholder("PIN").fill("1234");
+  await host.getByRole("button", { name: "Entrar" }).click();
+  const rojo = await nuevaPagina(browser, "móvil Rojo", opcionesMovil());
+  await rojo.goto(`/?c=${codigo}`);
+  await rojo.getByRole("button", { name: "Rojo" }).click();
+  await rojo.getByRole("button", { name: "Dejar «Rojo»" }).click();
+
+  await host.locator(".host-nav").getByRole("button", { name: "¿Cuánto le conocéis?" }).click();
+  await expect(tv.getByText("Escanead el QR con un móvil por equipo")).toBeVisible();
+  await expect(rojo.getByRole("link", { name: /Abrir Kahoot/ })).toHaveAttribute("href", "https://kahoot.it/challenge/0123456?challenge-id=prueba");
+  await foto(tv, "kahoot-enlace");
+
+  await host.locator(".host-nav").getByRole("button", { name: "Rap español" }).click();
+  await expect(host.getByLabel(/La música la pongo yo desde mi móvil/)).toBeChecked();
+  await host.getByRole("button", { name: /Primera canción/ }).click();
+  await expect(host.getByRole("link", { name: /Buscar en Spotify/ })).toHaveAttribute("href", /open\.spotify\.com\/search\/Mazas/);
+  await expect(tv.getByText("¡Pulsad en cuanto la reconozcáis!")).toBeVisible();
+  await foto(host, "presentador-cancion-movil");
+  await rojo.locator(".pulsador").click();
+  await expect(host.getByText(/¡Pausa la música! Ha pulsado Rojo/)).toBeVisible();
+  await host.getByRole("button", { name: "Acierto" }).click();
+  await expect(tv.locator(".revela")).toContainText("Mazas y catapultas");
+  await foto(tv, "cancion-revelada");
+});

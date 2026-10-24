@@ -467,7 +467,8 @@ function CancionTv({ p, progreso }: { p: Publico; progreso: Progreso }) {
         <>
           <Icono n={p.sonando && !progreso?.acabado ? "nota" : "pausa"} tam="14vh" style={{ color: "var(--bombilla)", animation: p.sonando && !progreso?.acabado ? "latido 0.6s infinite alternate" : undefined }} />
           <div className="tv-pregunta">{progreso?.acabado ? "Fin del fragmento… ¿quién la sabe?" : "¿Qué canción es?"}</div>
-          {!p.audio && <div className="tv-sub">(sin audio: el presentador la pone aparte)</div>}
+          {!p.audio && p.sub?.sonido !== "presentador" && <div className="tv-sub">(sin audio: el presentador la pone aparte)</div>}
+          {p.sub?.sonido === "presentador" && <div className="tv-sub">¡Pulsad en cuanto la reconozcáis!</div>}
           {p.audio && progreso && p.audio.fragmento > 0 && (
             <div className="barra-frag" aria-hidden>
               <div style={{ width: `${progreso.frac * 100}%` }} />
@@ -730,7 +731,8 @@ function Podio({ p, suena }: { p: Publico; suena: boolean }) {
 function ExternoTv({ p }: { p: Publico }) {
   const s = p.sub!;
   const pin = p.externo?.pin;
-  const url = pin ? `https://kahoot.it/?pin=${pin}&refer_method=link` : "https://kahoot.it";
+  const enlace = p.externo?.enlace;
+  const url = pin ? `https://kahoot.it/?pin=${pin}&refer_method=link` : enlace ?? "https://kahoot.it";
   return (
     <>
       <div className="tv-sub etiqueta">Prueba {s.pruebaNum} · {s.pruebaTitulo}</div>
@@ -749,6 +751,16 @@ function ExternoTv({ p }: { p: Publico }) {
               <QRCodeSVG value={url} size={Math.round(window.innerHeight * 0.3)} />
             </div>
             <div className="tv-sub" style={{ fontSize: "2.4vh" }}>o escanead para entrar directo</div>
+          </div>
+        </div>
+      ) : enlace ? (
+        <div className="fila" style={{ gap: "4vw", justifyContent: "center", alignItems: "center" }}>
+          <div style={{ background: "#fff", padding: "1.6vh", borderRadius: 6, border: "4px solid #050b1c", boxShadow: "8px 8px 0 #050b1c" }}>
+            <QRCodeSVG value={url} size={Math.round(window.innerHeight * 0.36)} />
+          </div>
+          <div className="col" style={{ alignItems: "flex-start", gap: "2vh", maxWidth: "40vw", textAlign: "left" }}>
+            <div className="tv-pregunta" style={{ fontSize: "5vh" }}>Escanead el QR con un móvil por equipo</div>
+            <div className="tv-sub">y poned de nombre <b style={{ color: "var(--bombilla)" }}>el de vuestro equipo</b></div>
           </div>
         </div>
       ) : (

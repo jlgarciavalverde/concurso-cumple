@@ -56,12 +56,12 @@ export type Sub =
   // modo «porItem» (por defecto): una letra/mezcla cada vez con su cuenta atrás; «hoja»: todo a la vez
   | (SubBase & { tipo: "adivinar"; estilo: "lista" | "rosco"; modo?: "porItem" | "hoja"; segundosItem?: number; opciones: string[]; segundos: number; items: ItemAdivinar[] })
   | (SubBase & { tipo: "precio"; sinPasarse: boolean; segundos: number; productos: Producto[] })
-  | (SubBase & { tipo: "cancion"; fragmento?: number; canciones: Cancion[] }) // fragmento: segundos que suena (0 = entera)
+  | (SubBase & { tipo: "cancion"; fragmento?: number; sonido?: "tv" | "presentador"; canciones: Cancion[] }) // fragmento: segundos que suena (0 = entera); sonido: quién pone la música
   | (SubBase & { tipo: "tarjetas"; modo: "palabra" | "dibujo"; tarjetaEnTv?: boolean; segundos: number; tarjetas: Tarjeta[] })
   | (SubBase & { tipo: "manual"; medida: string; mayorMejor: boolean; cronometro: boolean; segundos?: number })
   // Juego en otra plataforma (el Kahoot del cumpleañero): la TV enseña cómo unirse y se meten los puestos a mano.
   // `respaldo`: las preguntas propias, por si se vuelve a «Preguntas aquí».
-  | (SubBase & { tipo: "externo"; plataforma: "kahoot"; respaldo?: Sub });
+  | (SubBase & { tipo: "externo"; plataforma: "kahoot"; enlace?: string; respaldo?: Sub }); // enlace: el que pasa el cumpleañero
 
 export type TipoSub = Sub["tipo"];
 
@@ -179,6 +179,7 @@ export interface Publico {
     porItem?: boolean;
     modo?: "palabra" | "dibujo";
     tarjetaEnTv?: boolean;
+    sonido?: "tv" | "presentador";
     medida?: string;
     cronometro?: boolean;
     opciones?: string[];
@@ -203,7 +204,7 @@ export interface Publico {
   podioPaso: number;
   repetir: number;
   tv: { mudo: boolean; volumen: number };
-  externo?: { plataforma: "kahoot"; pin: string | null };
+  externo?: { plataforma: "kahoot"; pin: string | null; enlace: string | null }; // enlace: para que entren los jugadores
   votacion?: VotacionPublica;
   turno: EquipoId | null;
   condicion?: string;
@@ -248,6 +249,30 @@ export const miembros = (e: Pick<Equipo, "miembros">) => (e.miembros ?? []).map(
 
 export const tarjetaEnTv = (s: Extract<Sub, { tipo: "tarjetas" }>) => s.tarjetaEnTv ?? true;
 export const fragmento = (s: Extract<Sub, { tipo: "cancion" }>) => s.fragmento ?? 20;
+/** Quién pone la música: la TV (MP3/Spotify) o el presentador desde su móvil. Sin elegir: la TV si hay algún audio. */
+export const sonidoCancion = (s: Extract<Sub, { tipo: "cancion" }>) => s.sonido ?? (s.canciones.some((c) => c.audio || c.spotify) ? "tv" : "presentador");
+
+/**
+ * Qué es un enlace de Kahoot: con PIN (partida ya lanzada), para jugadores (kahoot.it/challenge…) o para el
+ * anfitrión (create.kahoot.it / play.kahoot.it: desde ahí se lanza, los jugadores no pueden usarlo).
+ */
+export function enlaceKahoot(entrada: string | undefined): { pin?: string; jugadores?: string; anfitrion?: string } {
+  const t = (entrada ?? "").trim();
+  if (!t) return {};
+  if (/^\d{4,10}$/.test(t)) return { pin: t };
+  let u: URL;
+  try {
+    u = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
+  } catch {
+    return {};
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  if (!host.endsWith("kahoot.it") && !host.endsWith("kahoot.com")) return {};
+  const pin = (u.searchParams.get("pin") ?? "").replace(/\D/g, "");
+  if (host === "kahoot.it" && pin) return { pin, jugadores: u.toString() };
+  if (host === "kahoot.it") return { jugadores: u.toString() };
+  return { anfitrion: u.toString() };
+}
 
 /** Lo que ven la TV y los votantes de la votación (sin saber quién gana hasta revelarlo). */
 export interface VotacionPublica {

@@ -1,5 +1,5 @@
 // Qué le falta a cada ronda para estar lista y qué hay que preparar en físico. Lo usan /admin y el panel.
-import type { Contenido, Sub } from "./tipos.ts";
+import { sonidoCancion, type Contenido, type Sub } from "./tipos.ts";
 
 const PLANTILLA = "✏️";
 const vacio = (s: string | undefined) => !s || !s.trim() || s.includes(PLANTILLA);
@@ -41,7 +41,7 @@ export function revisarSub(s: Sub): string[] {
       if (!s.canciones.length) falta.push("no tiene canciones");
       const sinMp3 = s.canciones.filter((c) => !c.audio && !c.spotify).length;
       const sinTitulo = s.canciones.filter((c) => vacio(c.titulo)).length;
-      if (sinMp3) falta.push(`${sinMp3} de ${s.canciones.length} canciones sin audio (ni MP3 ni Spotify)`);
+      if (sinMp3 && sonidoCancion(s) === "tv") falta.push(`${sinMp3} de ${s.canciones.length} canciones sin audio (ni MP3 ni Spotify)`);
       if (sinTitulo) falta.push(`${plural(sinTitulo, "canción", "canciones")} sin título`);
       break;
     }
@@ -80,10 +80,14 @@ export function preparacion(c: Contenido): string[] {
     if (s.tipo === "tarjetas" && s.modo === "dibujo") lista.push(`«${s.titulo}»: papel grande o pizarra y rotuladores`);
     if (s.tipo === "manual" && !/vaso/i.test(s.titulo + (s.descripcion ?? ""))) lista.push(`«${s.titulo}»: lo que necesite la prueba (${s.descripcion?.includes(PLANTILLA) ? "aún sin explicar" : s.descripcion ?? ""})`);
   }
-  if (subs.some((s) => s.tipo === "externo")) lista.push("El cumpleañero con su Kahoot listo para lanzarlo desde su cuenta (el PIN se escribe en el panel del presentador)");
+  if (subs.some((s) => s.tipo === "externo"))
+    lista.push("El cumpleañero con su Kahoot listo para lanzarlo desde su cuenta (al lanzarlo sale un PIN: se escribe en el panel del presentador y la TV lo enseña)");
   if (c.disfraces?.participantes.length) lista.push(`Concurso de disfraces: cada invitado vota con su móvil (${c.disfraces.participantes.length} en la lista)`);
-  if (subs.some((s) => s.tipo === "cancion" && s.canciones.some((x) => x.spotify))) lista.push("Spotify conectado en /admin y la TV abierta con el lanzador (hace de reproductor)");
-  if (subs.some((s) => s.tipo === "cancion")) lista.push("Altavoz o el sonido de la TV a buen volumen (la música sale por la TV)");
+  if (subs.some((s) => s.tipo === "cancion" && sonidoCancion(s) === "tv" && s.canciones.some((x) => x.spotify))) lista.push("Spotify conectado en /admin y la TV abierta con el lanzador (hace de reproductor)");
+  const canciones = subs.filter((s): s is Extract<Sub, { tipo: "cancion" }> => s.tipo === "cancion");
+  if (canciones.some((s) => sonidoCancion(s) === "tv")) lista.push("Altavoz o el sonido de la TV a buen volumen (la música sale por la TV)");
+  if (canciones.some((s) => sonidoCancion(s) === "presentador"))
+    lista.push("El móvil del presentador con Spotify y conectado a un altavoz (Bluetooth o la TV): pone él cada canción y el panel le dice cuál");
   return lista;
 }
 

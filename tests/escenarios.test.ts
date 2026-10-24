@@ -11,7 +11,7 @@ const contenidoInicial = () => {
 };
 import { estadoVacio, Juego, normalizarEstado } from "../server/juego.ts";
 import { validarContenido } from "../server/validar.ts";
-import type { Sub } from "../shared/tipos.ts";
+import { enlaceKahoot, sonidoCancion, type Sub } from "../shared/tipos.ts";
 
 const EQ = ["rojo", "azul", "verde", "amarillo"];
 
@@ -430,6 +430,55 @@ describe("Pulsador justo", () => {
   });
 });
 
+describe("Kahoot por enlace y música desde el móvil del presentador", () => {
+  it("clasifica los enlaces de Kahoot", () => {
+    expect(enlaceKahoot("https://kahoot.it/?pin=1234567&refer_method=link")).toMatchObject({ pin: "1234567" });
+    expect(enlaceKahoot("kahoot.it/challenge/09876543?challenge-id=abc")).toMatchObject({ jugadores: "https://kahoot.it/challenge/09876543?challenge-id=abc" });
+    expect(enlaceKahoot("https://create.kahoot.it/details/mi-kahoot/1a2b")).toEqual({ anfitrion: "https://create.kahoot.it/details/mi-kahoot/1a2b" });
+    expect(enlaceKahoot(" 7654321 ")).toEqual({ pin: "7654321" });
+    expect(enlaceKahoot("https://ejemplo.com/kahoot")).toEqual({});
+    expect(enlaceKahoot("")).toEqual({});
+  });
+
+  it("el enlace de jugadores sale en la TV; el PIN escrito en el panel manda", () => {
+    const { j, sub } = partida();
+    sub("kahoot", "externo").enlace = "https://kahoot.it/challenge/123?challenge-id=x";
+    j.host({ t: "ir", subId: "kahoot" });
+    expect(j.publico().externo).toEqual({ plataforma: "kahoot", pin: null, enlace: "https://kahoot.it/challenge/123?challenge-id=x" });
+    j.host({ t: "pin", pin: "555 666" });
+    expect(j.publico().externo?.pin).toBe("555666");
+    sub("kahoot", "externo").enlace = "https://create.kahoot.it/details/x/1";
+    expect(j.publico().externo?.enlace).toBeNull(); // el de la cuenta no sirve a los jugadores
+  });
+
+  it("canciones sin audio: la pone el presentador, la TV no intenta sonar y se revela el título", () => {
+    const { j, c, sub } = partida();
+    const s = sub("c-rap", "cancion");
+    expect(sonidoCancion(s)).toBe("presentador");
+    expect(validarContenido(c)).toBeNull();
+    j.host({ t: "ir", subId: "c-rap" });
+    j.host({ t: "empezar" });
+    expect(j.publico().audio).toBeUndefined();
+    expect(j.publico().sub?.sonido).toBe("presentador");
+    j.equipo("rojo", { t: "pulsar" });
+    j.tic();
+    expect(j.publico().pulsado).toBe("rojo");
+    j.host({ t: "acierto" });
+    expect(j.publico().solucion?.texto).toContain(s.canciones[0].titulo);
+    expect(j.estado.crudo["c-rap"]).toEqual({ rojo: 1 });
+    // Con MP3, si se elige «presentador» la TV tampoco suena; y se puede cambiar en directo
+    s.canciones[1].audio = "/media/x.mp3";
+    s.sonido = "presentador";
+    j.host({ t: "siguiente" });
+    expect(j.publico().audio).toBeUndefined();
+    j.host({ t: "config", campo: "sonidoPresentador", valor: false });
+    expect(s.sonido).toBe("tv");
+    expect(j.publico().audio?.src).toBe("/media/x.mp3");
+    s.sonido = "otro" as "tv";
+    expect(validarContenido(c)).toMatch(/música/);
+  });
+});
+
 describe("Cinco equipos", () => {
   it("el de serie trae 5; con la tabla 10/5/3/1 el 5º no suma; los integrantes se validan", () => {
     const c = inicial();
@@ -475,7 +524,7 @@ describe("Kahoot del cumpleañero (ronda externa)", () => {
   it("el PIN sale en la TV y los puestos de Kahoot reparten 10/5/3/1", () => {
     const { j, c } = partida();
     j.host({ t: "ir", subId: "kahoot" });
-    expect(j.publico().externo).toEqual({ plataforma: "kahoot", pin: null });
+    expect(j.publico().externo).toEqual({ plataforma: "kahoot", pin: null, enlace: null });
     j.host({ t: "pin", pin: " 123 456 7 " });
     expect(j.publico().externo?.pin).toBe("1234567");
     j.host({ t: "empezar" });

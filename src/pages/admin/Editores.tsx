@@ -1,5 +1,5 @@
 // Editor de cada ronda: guía arriba, lo importante con etiquetas claras y lo técnico plegado.
-import type { Cancion, ItemAdivinar, PreguntaTest, Producto, Sub, Tarjeta } from "../../../shared/tipos.ts";
+import { enlaceKahoot, sonidoCancion, type Cancion, type ItemAdivinar, type PreguntaTest, type Producto, type Sub, type Tarjeta } from "../../../shared/tipos.ts";
 import { BONUS_RAPIDEZ } from "../../../shared/puntuacion.ts";
 import { useState } from "react";
 import { revisarSub } from "../../../shared/revision.ts";
@@ -67,12 +67,25 @@ export function EditorSub({ sub, onChange, subir, abierto, onAbrir, num, spotify
 /** El Kahoot de la app de Kahoot del cumpleañero, guardando las preguntas propias por si se vuelve a ellas. */
 const aKahootReal = (s: Sub): Sub => ({ id: s.id, tipo: "externo", plataforma: "kahoot", titulo: s.titulo, descripcion: "El Kahoot del cumpleañero: entrad con el nombre de vuestro equipo.", respaldo: s });
 
+/** Qué se va a hacer con el enlace de Kahoot que pegan en /admin. */
+function ayudaKahoot(enlace: string | undefined): string {
+  if (!enlace?.trim()) return "Si lo dejas vacío, el PIN se escribe el día en el panel del presentador.";
+  const k = enlaceKahoot(enlace);
+  if (k.pin) return `Enlace de una partida ya lanzada (PIN ${k.pin}): la TV enseñará ese PIN y su QR.`;
+  if (k.jugadores) return "Enlace para jugadores: la TV enseñará un QR a este enlace.";
+  if (k.anfitrion) return "Enlace del Kahoot para lanzarlo: el presentador tendrá un botón para abrirlo; al lanzarlo sale un PIN que se escribe en su panel.";
+  return "Eso no parece un enlace de Kahoot (kahoot.it o create.kahoot.it).";
+}
+
 function Contenido({ sub, set, subir, cambiar, spotify }: { sub: Sub; set: (p: Partial<Sub>) => void; subir: (f: File) => Promise<string>; cambiar: (s: Sub) => void; spotify: ApiSpotify }) {
   switch (sub.tipo) {
     case "externo":
       return (
         <div className="panel col" style={{ background: "var(--bg2)" }}>
           <b>Se juega con el Kahoot que ha hecho el cumpleañero en la app de Kahoot.</b>
+          <Campo etiqueta="Enlace del Kahoot (opcional: el que te pase el cumpleañero)" ayuda={ayudaKahoot(sub.enlace)}>
+            <input className="campo" value={sub.enlace ?? ""} placeholder="https://create.kahoot.it/details/… o https://kahoot.it/…" onChange={(e) => set({ enlace: e.target.value })} />
+          </Campo>
           <span className="suave">
             Aquí no hay que escribir nada: el día, cuando él lance su Kahoot, el presentador escribe el PIN en su panel y la TV lo enseña con un QR. Al
             acabar, el presentador apunta en qué puesto quedó cada equipo.
@@ -242,6 +255,17 @@ function Contenido({ sub, set, subir, cambiar, spotify }: { sub: Sub; set: (p: P
     case "cancion":
       return (
         <>
+          <div className="panel col" style={{ background: "var(--bg2)" }}>
+            <b>¿Quién pone la música?</b>
+            <label className="fila" style={{ gap: 8 }}>
+              <input type="radio" name={`sonido-${sub.id}`} checked={sonidoCancion(sub) === "presentador"} onChange={() => set({ sonido: "presentador" })} />
+              <span><b>El presentador, desde su móvil</b> (con Spotify y un altavoz). La app solo pone el pulsador y le dice qué canción toca. Basta con el título y el artista.</span>
+            </label>
+            <label className="fila" style={{ gap: 8 }}>
+              <input type="radio" name={`sonido-${sub.id}`} checked={sonidoCancion(sub) === "tv"} onChange={() => set({ sonido: "tv" })} />
+              <span><b>La TV</b>, con la lista de Spotify cargada aquí o con MP3 subidos. Suena solo el trozo elegido.</span>
+            </label>
+          </div>
           <ListaSpotify spotify={spotify} canciones={sub.canciones} onCargar={(canciones) => set({ canciones })} />
           <Lista<Cancion>
             nombre="Canción"

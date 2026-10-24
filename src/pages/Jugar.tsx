@@ -255,13 +255,14 @@ function Cuerpo({ v, desfase, enviar }: { v: VistaEquipo; desfase: number; envia
       return <Pulsador v={v} enviar={enviar} />;
     case "externo": {
       const pin = v.externo?.pin;
+      const ir = pin ? `https://kahoot.it/?pin=${pin}&refer_method=link` : v.externo?.enlace;
       const yo = equipoDe(v, v.yo);
       return (
         <>
-          <Espera icono="usuarios" texto={pin ? `Kahoot del cumpleañero · PIN ${pin}` : "Esperando a que el cumpleañero lance su Kahoot…"} />
-          {pin && (
+          <Espera icono="usuarios" texto={pin ? `Kahoot del cumpleañero · PIN ${pin}` : ir ? "Kahoot del cumpleañero" : "Esperando a que el cumpleañero lance su Kahoot…"} />
+          {ir && (
             <>
-              <a className="btn prim grande" href={`https://kahoot.it/?pin=${pin}&refer_method=link`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+              <a className="btn prim grande" href={ir} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
                 <Icono n="enlace" /> Abrir Kahoot
               </a>
               <div className="espera suave">Entrad con el nombre «{yo?.nombre}» (un solo móvil por equipo). Luego volved aquí.</div>

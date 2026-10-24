@@ -36,6 +36,8 @@ export function validarContenido(c: unknown): string | null {
       if ("segundos" in s && segundosMal(s.segundos)) return `${donde}: los segundos tienen que estar entre 0 y 600`;
       if (s.tipo === "adivinar" && segundosMal(s.segundosItem)) return `${donde}: los segundos por cada uno tienen que estar entre 0 y 600`;
       if (s.tipo === "cancion" && segundosMal(s.fragmento)) return `${donde}: el fragmento tiene que estar entre 0 y 600 segundos`;
+      if (s.tipo === "cancion" && s.sonido !== undefined && s.sonido !== "tv" && s.sonido !== "presentador") return `${donde}: quién pone la música no es válido`;
+      if (s.tipo === "externo" && s.enlace !== undefined && (typeof s.enlace !== "string" || s.enlace.length > 500)) return `${donde}: el enlace del Kahoot no es válido`;
       if (s.tipo === "test")
         for (const [i, q] of s.preguntas.entries()) {
           const aqui = `${donde}, pregunta ${i + 1}`;

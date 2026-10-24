@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { contenidoInicial } from "../server/contenido-inicial.ts";
 import { preparacion, revisarSub } from "../shared/revision.ts";
+import type { Sub } from "../shared/tipos.ts";
 
 const subs = () => contenidoInicial().pruebas.flatMap((p) => p.subs);
 const de = (id: string) => subs().find((s) => s.id === id)!;
@@ -14,7 +15,8 @@ describe("¿Está todo listo?", () => {
     expect(revisarSub(de("olores"))).toEqual(["5 mezclas sin solución"]);
     expect(revisarSub(de("sabor"))).toEqual(["3 cachimbas sin solución"]);
     expect(revisarSub(de("precio"))).toEqual(["6 productos sin nombre", "6 productos con precio 0"]);
-    expect(revisarSub(de("c-rap"))).toEqual(["10 de 10 canciones sin audio (ni MP3 ni Spotify)"]);
+    expect(revisarSub(de("c-rap"))).toEqual([]); // sin audio: la pone el presentador desde su móvil
+    expect(revisarSub({ ...de("c-rap"), sonido: "tv" } as Sub)).toEqual(["10 de 10 canciones sin audio (ni MP3 ni Spotify)"]);
     expect(revisarSub(de("sorpresa"))).toEqual(["falta explicar en qué consiste"]);
     // Lo que ya viene hecho
     for (const id of ["cultura", "rosco", "torre", "dibujo", "prohibida", "kahoot"]) expect([id, revisarSub(de(id))]).toEqual([id, []]);

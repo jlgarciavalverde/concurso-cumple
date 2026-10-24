@@ -53,9 +53,9 @@ const POR_RONDA: Record<string, Guia> = {
   },
   "c-reggaeton": {
     que: "Adivinar canciones de reggaetón actual por un trocito.",
-    como: "En la TV suena un fragmento; el primer equipo que pulsa el botón del móvil dice la canción en voz alta. Si falla, rebota al resto.",
-    preparar: "Los MP3 de las canciones (de tu ordenador o descargados).",
-    escribir: "Ya hay 10 canciones propuestas: sube el MP3 de cada una (o cámbialas). Dale al play y, cuando llegue la parte que quieres que suene, pulsa «Empezar aquí». Si no subes MP3, el presentador tendrá que ponerla él.",
+    como: "Suena la canción; el primer equipo que pulsa el botón del móvil dice la canción en voz alta. Si falla, rebota al resto. La música la puede poner el presentador desde su móvil (la app le dice cuál toca) o la TV (Spotify o MP3).",
+    preparar: "Si la pone el presentador: Spotify en su móvil y un altavoz. Si la pone la TV: la lista de Spotify cargada aquí o los MP3.",
+    escribir: "Elige arriba quién pone la música. Si es el presentador, basta con el título y el artista de cada canción. Si es la TV, carga la lista de Spotify o sube el MP3 de cada una y elige desde qué segundo suena.",
   },
   torre: {
     que: "Montar la torre de vasos más alta posible en un tiempo.",
@@ -88,7 +88,7 @@ const POR_TIPO: Record<Sub["tipo"], Guia> = {
     que: "El Kahoot que ha preparado el cumpleañero en la app de Kahoot.",
     como: "Él lanza la partida desde su Kahoot; al lanzarla le sale un PIN de unas cifras. El presentador escribe ese PIN en su panel y nuestra TV enseña el PIN en grande y un QR para entrar directo. Cada equipo entra en Kahoot con su móvil usando el nombre de su equipo. Al acabar, el presentador apunta en qué puesto quedó cada equipo en el podio de Kahoot y la app reparte 10/5/3/1.",
     preparar: "Que el cumpleañero tenga su Kahoot listo en su cuenta y un dispositivo para lanzarlo (y, si quiere, enseñar sus preguntas en otra pantalla).",
-    escribir: "Nada: el PIN se pone el día, en el panel del presentador. Si al final no hay Kahoot del cumpleañero, cambia a «Preguntas aquí» y escribe las preguntas en la app.",
+    escribir: "Si el cumpleañero te pasa el enlace de su Kahoot, pégalo en «Enlace del Kahoot»: si es de jugadores, la TV enseña su QR; si es el de su cuenta, el presentador tendrá un botón para lanzarlo. Si no, nada: el PIN se pone el día en el panel. Si al final no hay Kahoot, cambia a «Preguntas aquí».",
   },
 };
 

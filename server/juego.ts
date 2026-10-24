@@ -1,6 +1,6 @@
 // Motor del concurso: estado + acciones del presentador y de los equipos. Sin E/S: el servidor persiste y emite.
 import { BONUS_RAPIDEZ, coincide, desglose, podioVotacion, puntosPrecio, puntosSub, puntosTest, totales } from "../shared/puntuacion.ts";
-import { fragmento, porItem, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo, type Votacion, type VotacionPublica } from "../shared/tipos.ts";
+import { enlaceKahoot, fragmento, porItem, sonidoCancion, segundosItem, tarjetaEnTv, type Contenido, type Estado, type EquipoId, type Marca, type Prueba, type Publico, type Sub, type Vista, type VistaEquipo, type Vivo, type Votacion, type VotacionPublica } from "../shared/tipos.ts";
 
 export type AccionHost =
   | { t: "ir"; subId: string | null }
@@ -30,7 +30,7 @@ export type AccionHost =
   | { t: "deCero" }
   | { t: "siguientePrueba" }
   | { t: "siguienteTurno" }
-  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez" | "fragmento"; valor: number | boolean }
+  | { t: "config"; campo: "segundos" | "segundosItem" | "tarjetaEnTv" | "rapidez" | "fragmento" | "sonidoPresentador"; valor: number | boolean }
   | { t: "podioPaso" }
   | { t: "repetir" }
   | { t: "tv"; mudo?: boolean; volumen?: number }
@@ -521,6 +521,7 @@ export class Juego {
         if (acc.campo === "tarjetaEnTv" && sub.tipo === "tarjetas") sub.tarjetaEnTv = !!acc.valor;
         if (acc.campo === "rapidez" && sub.tipo === "test") sub.rapidez = !!acc.valor;
         if (acc.campo === "fragmento" && sub.tipo === "cancion" && n >= 0 && n <= 600) sub.fragmento = n;
+        if (acc.campo === "sonidoPresentador" && sub.tipo === "cancion") sub.sonido = acc.valor ? "presentador" : "tv";
         return;
       }
       case "mas":
@@ -741,11 +742,13 @@ export class Juego {
       }
     } else if (sub.tipo === "cancion") {
       const c = sub.canciones[v.indice];
-      base.audiosSub = sub.canciones.map((x) => x.audio).filter((x): x is string => !!x);
+      const tv = sonidoCancion(sub) === "tv";
+      base.sub.sonido = sonidoCancion(sub);
+      base.audiosSub = tv ? sub.canciones.map((x) => x.audio).filter((x): x is string => !!x) : [];
       if (c && v.fase !== "intro") {
         // El MP3 manda si hay los dos (no depende de Spotify); si no, suena por Spotify en la TV
-        if (c.audio) base.audio = { src: c.audio, inicio: c.inicio, fragmento: fragmento(sub) };
-        else if (c.spotify) base.audio = { spotify: c.spotify, inicio: c.inicio, fragmento: fragmento(sub) };
+        if (tv && c.audio) base.audio = { src: c.audio, inicio: c.inicio, fragmento: fragmento(sub) };
+        else if (tv && c.spotify) base.audio = { spotify: c.spotify, inicio: c.inicio, fragmento: fragmento(sub) };
         if (v.fase === "revelar") {
           base.solucion = { texto: `${c.titulo} — ${c.artista}` };
           base.ganadores = v.acertante ? [v.acertante] : [];
@@ -762,7 +765,8 @@ export class Juego {
       base.sub.cronometro = sub.cronometro;
     } else if (sub.tipo === "externo") {
       base.sub.medida = "puesto";
-      base.externo = { plataforma: sub.plataforma, pin: e.pines?.[sub.id] ?? null };
+      const k = enlaceKahoot(sub.enlace);
+      base.externo = { plataforma: sub.plataforma, pin: e.pines?.[sub.id] || k.pin || null, enlace: k.jugadores ?? null };
     }
     return base;
   }
