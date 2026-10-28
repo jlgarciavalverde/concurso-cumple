@@ -1,6 +1,26 @@
 # Concurso del Cumple
 
-App para el concurso: TV + presentador + un móvil por equipo. 4 equipos; cada prueba reparte 10/5/3/1 (cultura general: 1 punto por acierto).
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-blue)](LICENSE)
+![Versión 0.12.0](https://img.shields.io/badge/versión-0.12.0-orange)
+![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
+![Socket.IO](https://img.shields.io/badge/tiempo%20real-Socket.IO-010101?logo=socket.io)
+
+App para un concurso de cumpleaños en casa: TV + presentador + un móvil por equipo. 5 equipos; cada prueba reparte 10/5/3/1 por puestos (cultura general: 1 punto por acierto, con plus por rapidez).
+
+```mermaid
+flowchart LR
+  host["📱 Presentador"] -- acciones --> srv["Servidor<br/>Fastify + Socket.IO"]
+  eq["📱 x5 Equipos"] -- respuestas / pulsador --> srv
+  srv -- vista pública --> tv["📺 TV"]
+  srv -- vista de cada equipo --> eq
+  srv --> data[("estado.json")]
+```
+
+- **Pruebas**: test, adivinar (lista o rosco), precio justo, canciones (MP3 o Spotify), palabra prohibida o dibujo, pruebas físicas con cronómetro y el Kahoot del cumpleañero.
+- **Pulsador justo** con compensación de latencia, **deshacer** en directo y partida que sobrevive a reinicios.
+- **Votación de disfraces** con revelación del podio y desempate.
+
+Diseño y detalle: [docs/arquitectura.md](docs/arquitectura.md) · [docs/requisitos.md](docs/requisitos.md) · [docs/flujos.md](docs/flujos.md).
 
 | Ruta | Para |
 |---|---|
@@ -39,3 +59,7 @@ Lista de invitados en `/admin`. En el panel, «Votación de disfraces» → Abri
 
 ## Desarrollo
 `pnpm dev` (servidor :3000 + Vite :5173, PIN 1234) · `pnpm test` · `pnpm build && pnpm e2e` (Chrome y Safari/iPhone; `--project=chromium` o `--project=safari`) · `node tools/deploy.mjs X.Y.Z`
+
+## Licencia
+
+[MIT](LICENSE) © 2026 José Luis García Valverde

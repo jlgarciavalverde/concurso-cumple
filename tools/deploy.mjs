@@ -6,7 +6,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-// Fuera de casa: VPS_HOST=joseluis@100.124.235.108 (Tailscale)
+// Fuera de casa: VPS_HOST=joseluis@<ip-tailscale-del-vps>
 const HOST = process.env.VPS_HOST ?? "joseluis@192.168.18.7";
 const DIR = "~/servicios/concurso";
 const IMAGE = "concurso-cumple";
