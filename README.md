@@ -5,60 +5,71 @@
 ![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 ![Socket.IO](https://img.shields.io/badge/tiempo%20real-Socket.IO-010101?logo=socket.io)
 
-App para un concurso de cumpleaños en casa: TV + presentador + un móvil por equipo. 5 equipos; cada prueba reparte 10/5/3/1 por puestos (cultura general: 1 punto por acierto, con plus por rapidez).
+**Un concurso de televisión para un cumpleaños en casa.** La TV hace de plató, el presentador lo dirige todo desde su móvil y cada uno de los 5 equipos juega con el suyo. No hay que instalar nada: se entra escaneando un QR.
+
+## Qué hace
+
+| | |
+|---|---|
+| 🎯 **7 tipos de prueba** | Test, adivinar (lista o rosco), precio justo, canciones (MP3 o Spotify), palabra prohibida o dibujo, pruebas físicas con cronómetro y el Kahoot del cumpleañero. |
+| 🏆 **Puntuación de concurso** | Cada prueba reparte 10/5/3/1 por puestos. En el test, 1 punto por acierto con plus por rapidez. |
+| ⚡ **Pulsador justo** | Compensa la latencia de cada móvil: gana quien pulsa antes, no quien tiene mejor wifi. |
+| ↩️ **Sin miedo a equivocarse** | Deshacer en directo, corrección de puntos antes de confirmar y una partida que sobrevive a reinicios y cortes de red. |
+| 🎭 **Votación de disfraces** | Con revelación del podio y desempate. |
+
+## Cómo funciona
 
 ```mermaid
 flowchart LR
   host["📱 Presentador"] -- acciones --> srv["Servidor<br/>Fastify + Socket.IO"]
-  eq["📱 x5 Equipos"] -- respuestas / pulsador --> srv
-  srv -- vista pública --> tv["📺 TV"]
-  srv -- vista de cada equipo --> eq
+  eq["📱 x5 Equipos"] -- "respuestas y pulsador" --> srv
+  srv -- "vista pública" --> tv["📺 TV"]
+  srv -- "vista de cada equipo" --> eq
   srv --> data[("estado.json")]
 ```
 
-- **Pruebas**: test, adivinar (lista o rosco), precio justo, canciones (MP3 o Spotify), palabra prohibida o dibujo, pruebas físicas con cronómetro y el Kahoot del cumpleañero.
-- **Pulsador justo** con compensación de latencia, **deshacer** en directo y partida que sobrevive a reinicios.
-- **Votación de disfraces** con revelación del podio y desempate.
+El servidor es la única fuente de verdad: guarda la partida y envía a cada pantalla solo lo que le toca ver. Así ningún equipo ve las respuestas de los demás antes de tiempo. Detalle en [arquitectura](docs/arquitectura.md) y [flujos](docs/flujos.md).
 
-Diseño y detalle: [docs/arquitectura.md](docs/arquitectura.md) · [docs/requisitos.md](docs/requisitos.md) · [docs/flujos.md](docs/flujos.md).
-
-| Ruta | Para |
+| Pieza | Tecnología |
 |---|---|
-| `/tv` | Portátil conectado a la TV: doble clic en **`tools/concurso-tv.command`** (copia en el Escritorio: «Concurso TV»). Abre Chrome a pantalla completa y con sonido permitido; en la TV no hay que tocar nada (salir: Cmd+Q). |
-| `/presentador` | Tu móvil/portátil (PIN). Lo maneja todo: pruebas, puntos, vista de la TV, sonido/volumen de la TV y «Recargar TV». Avisa si la TV está sin sonido. |
-| `/` | Móviles de los equipos: escanean el QR de la TV. |
-| `/admin` | Editar preguntas, subir MP3 y fotos (PIN). Lo marcado con ✏️ está por rellenar. |
+| Servidor | Node 22, Fastify 5, Socket.IO 4 |
+| Pantallas | React 19 + Vite (TV, presentador, equipos, admin y votación) |
+| Datos | JSON en disco con escritura atómica |
+| Música | MP3 propios o Spotify Web Playback SDK |
+| Tests | vitest (puntuación, escenarios de partida) y Playwright en Chrome y Safari de iPhone |
 
-## Antes del día
-1. `/admin`: rellena el Kahoot, las mezclas de olor/sabor, los productos del precio justo y sube los MP3 (con el segundo de inicio).
-2. Ensayo: TV + 2 móviles, una pregunta de cada prueba. Luego «Opciones avanzadas → Reiniciar partida».
+## Empezar
 
-## Durante
-- Cada prueba acaba en «Resultados»: revisa los puntos (se pueden cambiar) y pulsa **Confirmar**.
-- ↩️ Deshacer deshace la última acción del presentador. Ajustes ± del marcador para bonus/penalizaciones.
-- Palabra prohibida / dibujo: la tarjeta sale en el móvil del presentador; pásaselo a quien explica.
-- Si se cae algo, recarga: la partida se guarda en `data/estado.json` y sigue donde estaba.
+```sh
+pnpm install
+pnpm dev          # servidor en :3000 + Vite en :5173 (PIN 1234)
+```
 
-## Kahoot del cumpleañero
-Él lanza su Kahoot en directo desde la app de Kahoot. El presentador escribe en su panel el PIN que le sale y la TV lo enseña con un QR que entra directo. Cada equipo entra con su nombre; al acabar, el presentador apunta el puesto de cada equipo (1º → 10 puntos…).
+| Comando | Qué hace |
+|---|---|
+| `pnpm test` | Tests de puntuación y de la partida |
+| `pnpm build && pnpm e2e` | e2e en Chrome y Safari (`--project=chromium` o `--project=safari`) |
+| `node tools/deploy.mjs X.Y.Z` | Despliegue (ver [operaciones](docs/operaciones.md)) |
 
-## Concurso de disfraces (al final)
-Lista de invitados en `/admin`. En el panel, «Votación de disfraces» → Abrir: la TV enseña un QR (`/votar`), cada invitado elige su nombre y vota (uno por persona, no a sí mismo). Cerrar → Revelar (3º, 2º y ganador). Si hay empate, «Desempatar» abre una votación solo entre ellos.
+## Estructura
 
-## Canciones desde Spotify (opcional, cuenta Premium)
-1. https://developer.spotify.com/dashboard → Create app (con la cuenta Premium). Redirect URI: `https://concurso.redgarverde.com/api/spotify/callback`. Marcar «Web API» y «Web Playback SDK».
-2. Poner Client ID y secret en `~/servicios/concurso/.env` (ver `deploy/.env.example`) y `docker compose up -d`.
-3. `/admin` → una ronda de canciones → «Conectar con Spotify» → pegar el enlace de una lista **tuya** → «Cargar canciones».
-4. El día: TV abierta con el lanzador → en el panel, «Autorizar la TV para Spotify». La TV suena como un reproductor de Spotify (sin enseñar el título).
+```
+server/     index.ts (Fastify + Socket.IO), juego.ts (máquina de estados), spotify.ts, validar.ts
+shared/     tipos.ts (contrato), puntuacion.ts, revision.ts
+src/pages/  Tv, Presentador, Jugar (equipos), Admin, Votar
+tests/      unitarios · e2e/ Playwright · tools/ lanzador de la TV y despliegue
+```
 
-## Si algo falla el día
-- **Un móvil se queda sin red:** sale una banda roja «Reconectando…». Lo que respondan sin red se envía solo al volver (si aún hay tiempo; si no, verán «No llegó a tiempo»).
-- **Se reinicia el servidor:** la partida está guardada; TV, panel y móviles vuelven solos donde estaban.
-- **Pulsador:** gana quien pulsó antes de verdad, no quien tiene mejor red (se compensa la latencia de cada móvil, hasta 150 ms). En el panel se ve la latencia de cada equipo; si alguno pasa de 150 ms sale en rojo.
-- **Partida nueva tras el ensayo:** «Opciones avanzadas → Reiniciar partida» (o `POST /api/admin/reiniciar` con el PIN).
+## Documentación
 
-## Desarrollo
-`pnpm dev` (servidor :3000 + Vite :5173, PIN 1234) · `pnpm test` · `pnpm build && pnpm e2e` (Chrome y Safari/iPhone; `--project=chromium` o `--project=safari`) · `node tools/deploy.mjs X.Y.Z`
+Índice completo en [docs/](docs/README.md).
+
+| Para… | Lee |
+|---|---|
+| Presentar el concurso | [Guía del día](docs/guia-del-dia.md) |
+| Entender qué hace | [Requisitos](docs/requisitos.md) · [Flujos](docs/flujos.md) |
+| Entender cómo está hecho | [Arquitectura](docs/arquitectura.md) |
+| Desplegar y configurar Spotify | [Operaciones](docs/operaciones.md) |
 
 ## Licencia
 

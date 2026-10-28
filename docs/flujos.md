@@ -1,5 +1,7 @@
 # Flujos principales
 
+[← Documentación](README.md) · [README del proyecto](../README.md)
+
 ## Ciclo de una prueba
 
 ```mermaid

@@ -1,5 +1,7 @@
 # Arquitectura
 
+[← Documentación](README.md) · [README del proyecto](../README.md)
+
 Una sola app de Node que sirve cuatro pantallas y las mantiene sincronizadas en tiempo real con Socket.IO. El servidor tiene la única fuente de verdad (la partida) y cada pantalla recibe solo la vista que le toca.
 
 ## Pantallas y servidor
